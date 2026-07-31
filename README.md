@@ -222,6 +222,7 @@ Full write-up: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | Document | What's in it |
 |:--|:--|
 | [Quick start](docs/QUICKSTART.md) | install, first run, what each setting does |
+| [CLI Reference](docs/CLI.md) | command-line arguments for headless/server usage |
 | [Configuration](docs/CONFIGURATION.md) | every setting, every environment variable, the Chrome profile |
 | [Providers](docs/PROVIDERS.md) | how each host is extracted, and how to add another |
 | [Architecture](docs/ARCHITECTURE.md) | how V2 is built, feature by feature |
