@@ -91,15 +91,18 @@ causes the shared Chrome instance to start; it is not one browser per worker.
 
 ## Exit codes
 
-| Code | Current behavior |
+Scripts and cron can trust the process status without grepping the log:
+
+| Code | Meaning |
 |:--:|:--|
-| `0` | The CLI completes normally, including a run in which individual URLs fail, or is interrupted with `Ctrl+C`. Inspect the final `ok` and `fail` counts and `failed_links.txt` when it is written. |
-| `1` | The URL file is missing or has no usable URLs, or an unhandled exception reaches `main()`. In the latter case the CLI writes `crash_log.txt` beside `moon_cli.py`. |
-| `2` | `argparse` rejects command-line usage, such as missing required arguments or a non-integer value for an integer argument. |
+| `0` | Every file in the batch completed (or the run was interrupted with `Ctrl+C` before a failure code applied). |
+| `1` | The run finished but at least one file failed (dead link, exhausted retries, extraction failure), **or** an unhandled exception reached `main()` after start (writes `crash_log.txt` beside `moon_cli.py`). Partial failure does **not** abort the rest of the batch. |
+| `2` | Pre-flight only: the run never started — missing/unreadable URL file, no usable URLs, or `argparse` rejected usage (missing required args / bad integer flags). |
 
 After a normal run, the CLI writes `moontech_cli_*.log` and `moontech_cli_*.json`
 beside `moon_cli.py`, not inside `--output`. If any URL exhausts its attempts, it
-also writes `failed_links.txt` there.
+also writes `failed_links.txt` there. The summary line on stdout is unchanged so
+existing greps keep working.
 
 ## Relationship to GUI settings
 
