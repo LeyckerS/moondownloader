@@ -20,12 +20,22 @@ are ignored.
 | `--browsers` | integer | `8` | Number of parallel extraction workers. Despite the name, it does not start that many browsers: datanodes uses one shared Chrome instance. |
 | `--streams` | integer | `24` | Maximum number of concurrent download streams. |
 | `--retries` | integer | `3` | Maximum extraction attempts per URL. Network retries inside one download are separate. |
-| `--proxies` | path | `proxies.txt` | Proxy-list file to load. Missing files simply result in no proxies being loaded. |
+| `--proxies` | path | `proxies.txt` | Proxy-list file to load. A missing file, or one that yields no usable proxies, prints a warning — except the implicit default (`proxies.txt` when `--proxies` is omitted), whose absence stays silent as the normal no-proxy state. |
 | `--version` | flag | — | Print the version and exit. Works even without `--urls`/`--output`. |
 
 `--urls` and `--output` are required. The parser accepts integer values for
 `--browsers`, `--streams`, and `--retries`; it does not add further CLI-side range
 validation.
+
+The parser's actual default for `--proxies` is unset (`None`); `proxies.txt` is the
+effective fallback path applied afterward. That distinction is what lets the CLI tell
+"you didn't ask for proxies" (silent) apart from "you asked for a proxy file and it's
+missing or empty":
+
+- an explicitly passed path that doesn't exist: `WARNING: proxy file not found at {path}`
+- a file that exists but yields no usable proxies: `WARNING: proxy file {path} yielded 0 proxies`
+- the implicit default path missing: no warning
+- whenever any proxies load or lines get skipped: `[proxies] {n} loaded, {s} skipped`
 
 ## Examples
 
