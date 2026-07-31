@@ -362,13 +362,28 @@ def _fmt_speed(mbs: float) -> str:
     return f"{mbs:.1f} MB/s" if mbs >= 1 else f"{mbs*1024:.0f} KB/s"
 
 async def run(urls: list[str], output_dir: str, n_workers: int,
-              max_dl: int, max_retries: int, proxy_path: str):
+              max_dl: int, max_retries: int, proxy_path: str, proxy_required: bool = False):
 
     os.makedirs(output_dir, exist_ok=True)
 
     n_proxies = _PROXY_POOL.load(proxy_path)
     if n_proxies:
         print(f"[proxies] {n_proxies} loaded")
+    elif proxy_required:
+        if not os.path.exists(proxy_path):
+            print(f"[proxies] ERROR: file not found: {proxy_path}", file=sys.stderr)
+            raise SystemExit(2)
+        print(
+            f"[proxies] ERROR: no valid proxies parsed from {proxy_path} "
+            f"(need host:port, user:pass:host:port, or http(s)/socks URL per line)",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    elif os.path.exists(proxy_path):
+        print(
+            f"[proxies] warning: {proxy_path} present but no valid lines — continuing without proxies",
+            file=sys.stderr,
+        )
 
     q             = asyncio.Queue()
     dl_sem        = asyncio.Semaphore(max_dl)
@@ -586,7 +601,8 @@ def main():
     ap.add_argument("--browsers", type=int, default=8,  help="Parallel extraction workers (default: 8)")
     ap.add_argument("--streams",  type=int, default=24, help="Concurrent download streams (default: 24)")
     ap.add_argument("--retries",  type=int, default=3,  help="Max retries per link (default: 3)")
-    ap.add_argument("--proxies",  default="proxies.txt", help="Proxy list file (default: proxies.txt)")
+    ap.add_argument("--proxies",  default=None, metavar="FILE",
+                    help="Proxy list file (default: proxies.txt if present; error if FILE missing/empty when set)")
     args = ap.parse_args()
 
     if not os.path.exists(args.urls):
@@ -602,7 +618,9 @@ def main():
 
     try:
         asyncio.run(run(urls, args.output, args.browsers, args.streams,
-                        args.retries, args.proxies))
+                        args.retries,
+                        args.proxies if args.proxies is not None else "proxies.txt",
+                        args.proxies is not None))
     except KeyboardInterrupt:
         print("\nInterrupted.")
     except Exception:
