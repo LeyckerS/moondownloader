@@ -14,6 +14,7 @@ from urllib.parse import urlparse, unquote
 from moon_download import (
     LAUNCH_ARGS,
     Telemetry,
+    VERSION,
     _PROXY_POOL,
     _close_sess,
     _sanitize_filename,
@@ -276,6 +277,7 @@ def main():
     ap.add_argument("--streams",  type=int, default=24, help="Concurrent download streams (default: 24)")
     ap.add_argument("--retries",  type=int, default=3,  help="Max retries per link (default: 3)")
     ap.add_argument("--proxies",  default=None, help="Proxy list file (default: proxies.txt)")
+    ap.add_argument("--version",  action="version", version=VERSION)
     args = ap.parse_args()
 
     if not os.path.exists(args.urls):

@@ -21,6 +21,7 @@ are ignored.
 | `--streams` | integer | `24` | Maximum number of concurrent download streams. |
 | `--retries` | integer | `3` | Maximum extraction attempts per URL. Network retries inside one download are separate. |
 | `--proxies` | path | `proxies.txt` | Proxy-list file to load. Missing files simply result in no proxies being loaded. |
+| `--version` | flag | — | Print the version and exit. Works even without `--urls`/`--output`. |
 
 `--urls` and `--output` are required. The parser accepts integer values for
 `--browsers`, `--streams`, and `--retries`; it does not add further CLI-side range

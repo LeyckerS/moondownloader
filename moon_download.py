@@ -267,7 +267,7 @@ class Telemetry:
             buf.write(" ".join(str(p) for p in parts) + "\n")
 
         W("=" * 72)
-        W("MOONTECH CLI  --  PERFORMANCE LOG")
+        W(f"MOONTECH CLI {VERSION}  --  PERFORMANCE LOG")
         W("=" * 72)
         W(f"Duration : {int(el//60)}m {int(el%60)}s")
         if ok_r:
@@ -291,6 +291,7 @@ class Telemetry:
         )
         with open(jp, "w", encoding="utf-8") as f:
             json.dump({
+                "version": VERSION,
                 "duration_s": round(el, 2),
                 "ok": len(ok_r),
                 "fail": len(recs) - len(ok_r),
@@ -388,6 +389,7 @@ class Telemetry:
         with open(jp, "w", encoding="utf-8") as f:
             json.dump({
                 "session": {
+                    "version": VERSION,
                     "start": datetime.datetime.now().isoformat(),
                     "duration_s": round(el, 2),
                     "config": self.cfg,
