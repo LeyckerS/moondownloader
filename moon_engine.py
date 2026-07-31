@@ -84,25 +84,14 @@ if not HAVE_CURL_CFFI:
 
 print(f"datanodes: up to {DN_LANES} persistent browser window(s) "
       "(set MOON_DN_LANES to change)")
-
+load_config()
+save_config()
 class Engine:
 
     def __init__(self):
         # Settings arrive from the GUI on start(); these are the fallbacks used
         # for the first paint and for a start() that omits a field.
-        self._cfg = {
-            "out_folder": DEFAULT_DL_FOLDER,
-            "mode":       "download",
-            "workers":    16,
-            "dl_streams": 48,
-            "retries":    3,
-            # Defaults asked for by the operator, not by the library: 8 lanes
-            # and the shortest manual-captcha wait the extractor accepts.
-            "dn_pages":   8,
-            "dn_captcha": 30,
-            "dn_chrome":  _moon_extract.CHROME_PATH or (_moon_extract.find_chrome() or ""),
-            "dn_apikey":  DN_API_KEY,
-        }
+        self._cfg = load_config()
 
         self._lock       = threading.Lock()
         self._running    = False
@@ -138,13 +127,15 @@ class Engine:
     def _get(self, attr):
         with self._lock: return getattr(self, attr)
 
-    _LOG_MAX_LINES = 2000
+        _LOG_MAX_LINES = 2000
 
-    def log(self, msg, tag=""):
-        """Thread-safe: called from the asyncio worker, drained by snapshot()."""
+    def log(self, msg, tag="info"):
         with self._log_lock:
             self._log_ring.append((str(msg), tag))
             self._log_total += 1
+
+    def _log(self, msg, tag="info"):
+        self.log(msg, tag)
 
     async def _do_dl(self, proxy_url, cookies, filename, orig_url, rec,
                      kill_counts, dl_sem, dest_folder, telem, mark_done_fn,

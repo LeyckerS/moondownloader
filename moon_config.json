@@ -1,0 +1,8 @@
+{
+  "out_folder": "/home/user/Downloads",
+  "workers": 16,
+  "dl_streams": 48,
+  "retries": 3,
+  "dn_pages": 8,
+  "dn_captcha": 30
+}

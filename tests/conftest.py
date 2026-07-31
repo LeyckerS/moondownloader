@@ -1,6 +1,6 @@
 """Shared pytest fixtures for no-Chrome regression tests."""
 from __future__ import annotations
-
+import moon_engine
 import asyncio
 import pathlib
 import sys
