@@ -1,4 +1,5 @@
 """Shared pytest fixtures for no-Chrome regression tests."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,6 @@ sys.path.insert(0, str(ROOT))
 import moon_cli  # noqa: E402
 import moon_engine  # noqa: E402
 import moon_extract  # noqa: E402
-
 
 @pytest.fixture
 def browser_calls(monkeypatch):
