@@ -51,13 +51,13 @@ def _fmt_speed(mbs: float) -> str:
     return f"{mbs:.1f} MB/s" if mbs >= 1 else f"{mbs*1024:.0f} KB/s"
 
 async def run(urls: list[str], output_dir: str, n_workers: int,
-              max_dl: int, max_retries: int, proxy_path: str):
+              max_dl: int, max_retries: int, proxy_path: str, is_default_proxies: bool = False):
 
     os.makedirs(output_dir, exist_ok=True)
 
-    n_proxies = _PROXY_POOL.load(proxy_path)
-    if n_proxies:
-        print(f"[proxies] {n_proxies} loaded")
+    n_proxies, skipped = _PROXY_POOL.load(proxy_path, is_default=is_default_proxies)
+    if n_proxies or skipped:
+        print(f"[proxies] {n_proxies} loaded, {skipped} skipped")
 
     q             = asyncio.Queue()
     dl_sem        = asyncio.Semaphore(max_dl)
@@ -275,7 +275,7 @@ def main():
     ap.add_argument("--browsers", type=int, default=8,  help="Parallel extraction workers (default: 8)")
     ap.add_argument("--streams",  type=int, default=24, help="Concurrent download streams (default: 24)")
     ap.add_argument("--retries",  type=int, default=3,  help="Max retries per link (default: 3)")
-    ap.add_argument("--proxies",  default="proxies.txt", help="Proxy list file (default: proxies.txt)")
+    ap.add_argument("--proxies",  default=None, help="Proxy list file (default: proxies.txt)")
     args = ap.parse_args()
 
     if not os.path.exists(args.urls):
@@ -289,9 +289,12 @@ def main():
 
     print(f"Loaded {len(urls)} URLs from {args.urls}")
 
+    is_default_proxies = args.proxies is None
+    proxy_path = args.proxies if args.proxies is not None else "proxies.txt"
+
     try:
         asyncio.run(run(urls, args.output, args.browsers, args.streams,
-                        args.retries, args.proxies))
+                        args.retries, proxy_path, is_default_proxies))
     except KeyboardInterrupt:
         print("\nInterrupted.")
     except Exception:

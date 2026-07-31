@@ -106,10 +106,13 @@ class ProxyPool:
         self._lock = threading.Lock()
         self._sessions: dict[str, aiohttp.ClientSession] = {}
 
-    def load(self, path: str) -> int:
+    def load(self, path: str, is_default: bool = False) -> tuple[int, int]:
         if not os.path.exists(path):
-            return 0
+            if not is_default:
+                print(f"WARNING: proxy file not found at {path}")
+            return 0, 0
         loaded = []
+        skipped = 0
         with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -132,11 +135,16 @@ class ProxyPool:
                         elif len(parts) == 2:
                             ip, port = parts
                             loaded.append({"url": f"http://{ip}:{port}", "auth": None})
+                        else:
+                            skipped += 1
                 except Exception:
                     # Skip line if proxy parsing or auth formatting fails
+                    skipped += 1
                     continue
         self.proxies = loaded
-        return len(loaded)
+        if not loaded:
+            print(f"WARNING: proxy file {path} yielded 0 proxies")
+        return len(loaded), skipped
 
     def next(self) -> dict | None:
         """Round-robin proxy selection."""

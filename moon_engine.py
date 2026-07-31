@@ -480,7 +480,7 @@ class Engine:
             captcha_wait=eff["dn_captcha"])
 
         proxy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxies.txt")
-        self._proxies = _PROXY_POOL.load(proxy_path)
+        self._proxies, skipped = _PROXY_POOL.load(proxy_path, is_default=True)
 
         n, d, r = eff["workers"], eff["dl_streams"], eff["retries"]
         self.log(f"▶  {len(urls)} links  ·  {n} extractors  ·  {d} streams  ·  {r} retries  ·  {VERSION}", "info")
@@ -489,8 +489,8 @@ class Engine:
                  f"   ·   datanodes: {applied['lanes']} pages, captcha {applied['captcha_wait']}s"
                  f"{', API key' if applied['api_key'] else ''}", "dim")
         self.log(f"   chrome: {applied['chrome']}", "dim")
-        if self._proxies:
-            self.log(f"   proxies: {self._proxies} loaded — rotating per download", "info")
+        if self._proxies or skipped:
+            self.log(f"   proxies: {self._proxies} loaded, {skipped} skipped — rotating per download", "info")
         self.log(f"   stall < {STALL_MIN_MBS} MB/s  ·  grace {STALL_GRACE_S}s  ·  max {STALL_MAX_KILL} kill", "dim")
 
         self._thread = threading.Thread(
