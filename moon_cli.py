@@ -577,8 +577,12 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             f.write("\n".join(failed_urls) + "\n")
         print(f"Failed ({len(failed_urls)}): {fp}")
 
+    # Exit status for scripting: 0 = all ok, 1 = partial failure (see issue #32).
+    return fail_count
+
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────
-def main():
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry. Returns process exit code (0 / 1 / 2). See docs/CLI.md."""
     ap = argparse.ArgumentParser(
         description="MoonDownloader CLI — headless downloader for server deployment")
     ap.add_argument("--urls",     required=True,  help="Text file with one URL per line")
@@ -587,29 +591,42 @@ def main():
     ap.add_argument("--streams",  type=int, default=24, help="Concurrent download streams (default: 24)")
     ap.add_argument("--retries",  type=int, default=3,  help="Max retries per link (default: 3)")
     ap.add_argument("--proxies",  default="proxies.txt", help="Proxy list file (default: proxies.txt)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
+    # Pre-flight only → exit 2 (run never starts).
     if not os.path.exists(args.urls):
-        print(f"ERROR: urls file not found: {args.urls}"); sys.exit(1)
-
-    with open(args.urls, encoding="utf-8", errors="replace") as f:
-        urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+        print(f"ERROR: urls file not found: {args.urls}")
+        return 2
+    try:
+        with open(args.urls, encoding="utf-8", errors="replace") as f:
+            urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+    except OSError as exc:
+        print(f"ERROR: cannot read urls file: {args.urls}: {exc}")
+        return 2
 
     if not urls:
-        print("ERROR: no URLs found in file"); sys.exit(1)
+        print("ERROR: no URLs found in file")
+        return 2
 
     print(f"Loaded {len(urls)} URLs from {args.urls}")
 
     try:
-        asyncio.run(run(urls, args.output, args.browsers, args.streams,
-                        args.retries, args.proxies))
+        fail_count = asyncio.run(
+            run(urls, args.output, args.browsers, args.streams,
+                args.retries, args.proxies)
+        )
     except KeyboardInterrupt:
         print("\nInterrupted.")
+        return 0
     except Exception:
         crash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
-        with open(crash, "w", encoding="utf-8") as f: f.write(traceback.format_exc())
+        with open(crash, "w", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
         traceback.print_exc()
-        sys.exit(1)
+        return 1
+
+    # Partial failure is exit 1; clean batch is 0. Batch is never aborted early.
+    return 1 if fail_count else 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
