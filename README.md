@@ -143,7 +143,7 @@ pip install -r requirements.txt
 playwright install chromium
 python moon_bridge.py            # GUI
 python moon_bridge.py --serve    # server only, prints the URL
-python moon_cli.py <url> ... -o <folder>   # headless CLI
+python moon_cli.py --urls links.txt --output ./downloads   # headless CLI (--urls is a file of URLs)
 ```
 
 ### Just want to look at the interface?
