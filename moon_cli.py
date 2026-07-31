@@ -7,201 +7,18 @@ Usage:
     python moon_cli.py --urls links.txt --output /path/to/downloads
     python moon_cli.py --urls links.txt --output ./dl --browsers 8 --streams 24 --retries 3
 """
-import os, re, sys, asyncio, threading, argparse, json, datetime
-import time, random, traceback, collections, io
+import os, sys, asyncio, threading, argparse
+import time, traceback, collections
 from urllib.parse import urlparse, unquote
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field, asdict
 
-import aiohttp
-
-# ── TUNING (identical to GUI version) ─────────────────────────────────────────
-RECV_CHUNK             = 4  * 1024 * 1024
-WRITE_BUF              = 16 * 1024 * 1024
-READ_BUFSZ             = 1  << 19
-
-STALL_MIN_MBS          = 0.5
-STALL_GRACE_S          = 90
-STALL_CHECK_S          = 20
-STALL_WIN_S            = 60
-STALL_MAX_KILL         = 1
-STALL_SAFE_PCT         = 0.80
-STALL_MIN_BYTES_IN_WIN = 30 * 1024 * 1024
-STALL_MIN_FILE_BYTES   = 50 * 1024 * 1024
-
-DL_INNER_RETRIES       = 4
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
-]
-
-LAUNCH_ARGS = [
-    "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
-    "--disable-gpu", "--disable-extensions", "--disable-background-networking",
-    "--disable-default-apps", "--disable-sync", "--no-first-run", "--no-zygote",
-    "--mute-audio", "--hide-scrollbars", "--disable-breakpad",
-    "--disable-component-update", "--disable-renderer-backgrounding",
-    "--disable-backgrounding-occluded-windows",
-]
-
-_WIN_INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-def _sanitize_filename(name: str) -> str:
-    name = _WIN_INVALID.sub("_", name).strip(". ")
-    return name or "download"
-
-# ── SHARED RESOURCES ───────────────────────────────────────────────────────────
-_SESSION : aiohttp.ClientSession | None = None
-_POOL    = ThreadPoolExecutor(max_workers=12, thread_name_prefix="dl_write")
-
-def _sess() -> aiohttp.ClientSession:
-    global _SESSION
-    if _SESSION is None or _SESSION.closed:
-        conn = aiohttp.TCPConnector(limit=0, limit_per_host=0, force_close=False,
-                                    enable_cleanup_closed=True, ttl_dns_cache=600,
-                                    keepalive_timeout=30)
-        _SESSION = aiohttp.ClientSession(
-            connector=conn, read_bufsize=READ_BUFSZ,
-            timeout=aiohttp.ClientTimeout(total=7200, connect=20, sock_read=90))
-    return _SESSION
-
-async def _close_sess():
-    global _SESSION
-    if _SESSION and not _SESSION.closed:
-        await _SESSION.close(); _SESSION = None
-
-# ── PROXY POOL ─────────────────────────────────────────────────────────────────
-class ProxyPool:
-    def __init__(self):
-        self.proxies : list[dict] = []
-        self._idx    = 0
-        self._lock   = threading.Lock()
-        self._sessions : dict[str, aiohttp.ClientSession] = {}
-
-    def load(self, path: str) -> int:
-        if not os.path.exists(path): return 0
-        loaded = []
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"): continue
-                try:
-                    if line.startswith("http://") or line.startswith("https://") or line.startswith("socks"):
-                        loaded.append({"url": line, "auth": None})
-                    else:
-                        parts = line.split(":")
-                        if len(parts) == 4:
-                            if re.match(r'^\d+\.\d+\.\d+\.\d+$', parts[0]):
-                                ip, port, user, passwd = parts
-                            else:
-                                user, passwd, ip, port = parts
-                            loaded.append({"url": f"http://{ip}:{port}",
-                                           "auth": aiohttp.BasicAuth(user, passwd)})
-                        elif len(parts) == 2:
-                            ip, port = parts
-                            loaded.append({"url": f"http://{ip}:{port}", "auth": None})
-                except Exception: continue
-        self.proxies = loaded
-        return len(loaded)
-
-    def next(self) -> dict | None:
-        if not self.proxies: return None
-        with self._lock:
-            p = self.proxies[self._idx % len(self.proxies)]
-            self._idx += 1
-        return p
-
-    def get_session(self, proxy: dict) -> aiohttp.ClientSession:
-        key = proxy["url"]
-        if key not in self._sessions or self._sessions[key].closed:
-            conn = aiohttp.TCPConnector(limit=0, limit_per_host=0, force_close=True,
-                                        enable_cleanup_closed=True, ttl_dns_cache=300)
-            self._sessions[key] = aiohttp.ClientSession(
-                connector=conn, read_bufsize=READ_BUFSZ,
-                timeout=aiohttp.ClientTimeout(total=7200, connect=30, sock_read=120))
-        return self._sessions[key]
-
-    async def close_all(self):
-        for s in self._sessions.values():
-            if not s.closed:
-                try: await s.close()
-                except Exception: pass
-        self._sessions.clear()
-
-_PROXY_POOL = ProxyPool()
-
-# ── TELEMETRY ──────────────────────────────────────────────────────────────────
-@dataclass
-class FileRecord:
-    url          : str
-    filename     : str
-    worker_id    : int   = -1
-    stall_kills  : int   = 0
-    queued_at    : float = 0.0
-    extract_s    : float = 0.0
-    dl_start     : float = 0.0
-    dl_s         : float = 0.0
-    file_bytes   : int   = 0
-    status       : str   = "pending"
-    error        : str   = ""
-    avg_mbs      : float = 0.0
-    queue_wait_s : float = 0.0
-    notes        : list  = field(default_factory=list)
-
-class Telemetry:
-    def __init__(self, cfg: dict):
-        self.cfg       = cfg
-        self.t0        = time.monotonic()
-        self.t_end     = 0.0
-        self.files     : dict[str, FileRecord] = {}
-        self.snapshots : list[dict] = []
-        self._lock     = threading.Lock()
-
-    def reg(self, url: str, filename: str) -> FileRecord:
-        rec = FileRecord(url=url, filename=filename, queued_at=time.monotonic())
-        with self._lock: self.files[url] = rec
-        return rec
-
-    def snap(self, dls, qsize, ok, fail):
-        self.snapshots.append({"ts": round(time.monotonic()-self.t0, 1),
-            "downloads": dls, "queue": qsize, "ok": ok, "fail": fail})
-
-    def finish(self): self.t_end = time.monotonic()
-
-    def save(self, out_dir: str) -> tuple[str, str]:
-        os.makedirs(out_dir, exist_ok=True)
-        ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        lp   = os.path.join(out_dir, f"moontech_cli_{ts}.log")
-        jp   = os.path.join(out_dir, f"moontech_cli_{ts}.json")
-        el   = self.t_end - self.t0
-        recs = list(self.files.values())
-        ok_r = [r for r in recs if r.status == "ok"]
-
-        buf = io.StringIO()
-        def W(*parts): buf.write(" ".join(str(p) for p in parts) + "\n")
-        W("="*72); W("MOONTECH CLI  --  PERFORMANCE LOG"); W("="*72)
-        W(f"Duration : {int(el//60)}m {int(el%60)}s")
-        if ok_r:
-            tb = sum(r.file_bytes for r in ok_r)
-            W(f"Total    : {tb/1e9:.2f} GB  @  {tb/el/1e6:.1f} MB/s")
-        W(f"OK: {len(ok_r)}  /  Fail: {len(recs)-len(ok_r)}")
-        W()
-        W(f"{'#':<4} {'Filename':<48} {'DL':>7} {'Speed':>10} {'Status'}")
-        W("-"*80)
-        for i, r in enumerate(recs, 1):
-            spd = f"{r.avg_mbs:.1f} MB/s" if r.avg_mbs > 0 else "--"
-            W(f"{i:<4} {r.filename[:48]:<48} {r.dl_s:>7.1f} {spd:>10} {r.status}")
-        W("="*72)
-
-        with open(lp, "w", encoding="utf-8") as f: f.write(buf.getvalue())
-        with open(jp, "w", encoding="utf-8") as f:
-            json.dump({"duration_s": round(el,2), "ok": len(ok_r),
-                       "fail": len(recs)-len(ok_r),
-                       "files": [asdict(r) for r in recs]}, f, indent=2)
-        return lp, jp
+from moon_download import (
+    LAUNCH_ARGS,
+    Telemetry,
+    _PROXY_POOL,
+    _close_sess,
+    _sanitize_filename,
+    download_file,
+)
 
 # ── EXTRACTION ────────────────────────────────────────────────────────────────
 # Both host front-ends changed in 2026; the extraction layer now lives in
@@ -211,17 +28,10 @@ from moon_extract import (                       # noqa: E402
     extract_datanodes,
     BrowserGate,
     close_ff_session,
-    referer_for,
     HAVE_CURL_CFFI,
     DN_API_KEY,
     DN_LANES,
 )
-import moon_extract as _moon_extract            # noqa: E402
-
-# The degraded no-curl_cffi fuckingfast path, and the lane pool's per-context user
-# agent, both reuse this module's own HTTP/UA plumbing.
-_moon_extract._sess = _sess
-_moon_extract.USER_AGENTS = USER_AGENTS
 
 if DN_API_KEY:
     print("datanodes: MOON_DN_API_KEY set - trying the API first "
@@ -235,127 +45,6 @@ if not HAVE_CURL_CFFI:
 
 print(f"datanodes: up to {DN_LANES} persistent browser window(s) "
       "(set MOON_DN_LANES to change)")
-
-# ── DOWNLOAD ───────────────────────────────────────────────────────────────────
-class _StallKill(Exception): pass
-
-async def download_file(
-    proxy_url    : str,
-    cookies      : str,
-    dest         : str,
-    rec          : FileRecord,
-    bytes_acc    : collections.deque,
-    kill_evt     : asyncio.Event,
-    kills_so_far : int,
-) -> tuple[bool, str, int]:
-    """Download a single file with resume support, stall detection, and proxy rotation."""
-    tmp    = dest + ".tmp"
-    loop   = asyncio.get_running_loop()
-    detect = kills_so_far < STALL_MAX_KILL
-
-    def _write(f, data: bytes): f.write(data)
-
-    for att in range(DL_INNER_RETRIES):
-        resume = os.path.getsize(tmp) if os.path.exists(tmp) else 0
-        ref = referer_for(proxy_url)
-        hdrs = {
-            "User-Agent": random.choice(USER_AGENTS),
-            "Referer":    ref,
-            "Connection": "keep-alive",
-        }
-        if cookies: hdrs["Cookie"] = cookies
-        if resume > 0: hdrs["Range"] = f"bytes={resume}-"
-
-        proxy_cfg     = _PROXY_POOL.next()
-        dl_session    = _PROXY_POOL.get_session(proxy_cfg) if proxy_cfg else _sess()
-        dl_proxy      = proxy_cfg["url"]  if proxy_cfg else None
-        dl_proxy_auth = proxy_cfg["auth"] if proxy_cfg else None
-
-        try:
-            dl_t0      = time.monotonic()
-            req_kwargs = dict(headers=hdrs)
-            if dl_proxy:
-                req_kwargs["proxy"]      = dl_proxy
-                req_kwargs["proxy_auth"] = dl_proxy_auth
-
-            async with dl_session.get(proxy_url, **req_kwargs) as r:
-                if r.status == 416:
-                    if os.path.exists(tmp): os.replace(tmp, dest)
-                    rec.file_bytes = os.path.getsize(dest) if os.path.exists(dest) else 0
-                    return True, "ok", 0
-                if r.status not in (200, 206):
-                    return False, f"HTTP {r.status}", resume
-                if r.status == 200 and resume > 0: resume = 0
-
-                file_size = int(r.headers.get("Content-Length", 0)) + resume
-                if file_size > 0: rec.file_bytes = file_size
-
-                effective_detect = detect and (file_size == 0 or file_size >= STALL_MIN_FILE_BYTES)
-                f = open(tmp, "ab" if resume > 0 else "wb")
-                speed_win  = collections.deque(maxlen=8000)
-                downloaded = resume
-                last_check = dl_t0
-
-                try:
-                    buf: list[bytes] = []; bufsz = 0
-                    async for chunk in r.content.iter_chunked(RECV_CHUNK):
-                        if not chunk: break
-                        if kill_evt.is_set(): raise _StallKill()
-                        now         = time.monotonic()
-                        downloaded += len(chunk)
-                        speed_win.append((now, len(chunk)))
-                        bytes_acc.append((now, len(chunk)))
-                        buf.append(chunk); bufsz += len(chunk)
-                        if bufsz >= WRITE_BUF:
-                            data = b"".join(buf); buf = []; bufsz = 0
-                            await loop.run_in_executor(_POOL, _write, f, data)
-
-                        if effective_detect and (now - last_check) >= STALL_CHECK_S:
-                            last_check = now
-                            elapsed = now - dl_t0
-                            if elapsed >= STALL_GRACE_S:
-                                pct    = downloaded / file_size if file_size > 0 else 0.0
-                                cutoff = now - STALL_WIN_S
-                                while speed_win and speed_win[0][0] < cutoff:
-                                    speed_win.popleft()
-                                win_bytes = sum(b for _, b in speed_win)
-                                if win_bytes >= STALL_MIN_BYTES_IN_WIN and pct < STALL_SAFE_PCT:
-                                    win_s = max(now - speed_win[0][0], 1.0)
-                                    spd   = win_bytes / win_s / 1e6
-                                    if spd < STALL_MIN_MBS:
-                                        kill_evt.set(); raise _StallKill()
-
-                    if buf:
-                        bytes_acc.append((time.monotonic(), sum(len(b) for b in buf)))
-                        await loop.run_in_executor(_POOL, _write, f, b"".join(buf))
-                finally:
-                    f.close()
-
-            os.replace(tmp, dest)
-            dl_s = max(time.monotonic() - dl_t0, 0.001)
-            net  = downloaded - resume
-            if net > 0: rec.avg_mbs = net / dl_s / 1e6
-            rec.file_bytes = rec.file_bytes or downloaded
-            return True, "ok", 0
-
-        except _StallKill:
-            return False, "stall_killed", downloaded
-        except (aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError):
-            rec.notes.append(f"connection dropped att {att+1}")
-            if att < DL_INNER_RETRIES - 1: await asyncio.sleep(0.5*(att+1)); continue
-            return False, "connection dropped", downloaded
-        except asyncio.TimeoutError:
-            rec.notes.append(f"timeout att {att+1}")
-            if att < DL_INNER_RETRIES - 1: await asyncio.sleep(1+att); continue
-            return False, "timeout", downloaded
-        except Exception as e:
-            err = str(e)
-            rec.notes.append(f"error att {att+1}: {err}")
-            if att < DL_INNER_RETRIES - 1 and ("ContentLengthError" in err or "not enough data" in err.lower()):
-                await asyncio.sleep(0.5*(att+1)); continue
-            return False, err, downloaded
-
-    return False, "max retries", 0
 
 # ── CLI ORCHESTRATION ──────────────────────────────────────────────────────────
 def _fmt_speed(mbs: float) -> str:
@@ -386,7 +75,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
 
     cfg = {"browsers": n_workers, "dl_streams": max_dl, "retries": max_retries,
            "total_links": len(urls)}
-    telem = Telemetry(cfg)
+    telem = Telemetry(cfg, flavor="cli")
 
     for url in urls:
         p = urlparse(url)
@@ -606,6 +295,7 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrupted.")
     except Exception:
+        # Catch unexpected top-level CLI exceptions to log crash traceback and exit cleanly
         crash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
         with open(crash, "w", encoding="utf-8") as f: f.write(traceback.format_exc())
         traceback.print_exc()

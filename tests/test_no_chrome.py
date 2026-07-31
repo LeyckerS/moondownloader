@@ -20,6 +20,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 FF = [f"https://fuckingfast.co/x{n}/pack.part{n:02d}.rar" for n in range(1, 4)]
 DN = ["https://datanodes.to/y1/pack.part99.rar"]
 FRONT_ENDS = ("moon_engine.py", "moon_cli.py")
+DOWNLOAD_DEFS = (
+    "async def download_file",
+    "class Telemetry",
+    "class ProxyPool",
+)
 
 
 def run_engine(engine, urls) -> dict:
@@ -115,3 +120,15 @@ def test_front_ends_route_browser_launches_through_browser_gate():
         assert not re.search(r"(?<!def )(?<!fake_)open_browser\s*\(", text)
         assert "BrowserGate(" in text
         assert "await get_browser()" in text or "gate.get" in text
+
+
+def test_front_ends_import_shared_download_engine():
+    shared = (ROOT / "moon_download.py").read_text(encoding="utf-8")
+    for marker in DOWNLOAD_DEFS:
+        assert marker in shared
+
+    for name in FRONT_ENDS:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        for marker in DOWNLOAD_DEFS:
+            assert marker not in text
+        assert "from moon_download import" in text

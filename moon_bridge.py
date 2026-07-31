@@ -104,6 +104,7 @@ root = tk.Tk(); root.withdraw()
 try:
     root.attributes("-topmost", True)
 except Exception:
+    # Some platforms or window managers reject -topmost
     pass
 kind = sys.argv[1]
 if kind == "folder":
@@ -129,7 +130,8 @@ def native_dialog(kind: str) -> str:
         proc = subprocess.run([sys.executable, "-c", _DIALOG_SRC, kind],
                               capture_output=True, text=True, timeout=300)
         return proc.stdout.strip()
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
+        # Fallback to empty string if Tk subprocess fails to launch or times out
         return ""
 
 
