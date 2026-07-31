@@ -84,15 +84,23 @@ if not HAVE_CURL_CFFI:
 
 print(f"datanodes: up to {DN_LANES} persistent browser window(s) "
       "(set MOON_DN_LANES to change)")
-load_config()
-save_config()
+
 class Engine:
 
     def __init__(self):
         # Settings arrive from the GUI on start(); these are the fallbacks used
         # for the first paint and for a start() that omits a field.
-        self._cfg = load_config()
-
+        self._cfg = {
+    "out_folder": DEFAULT_DL_FOLDER,
+    "mode": "download",
+    "workers": 16,
+    "dl_streams": 48,
+    "retries": 3,
+    "dn_pages": 8,
+    "dn_captcha": 30,
+    "dn_chrome": _moon_extract.CHROME_PATH or (_moon_extract.find_chrome() or ""),
+    "dn_apikey": DN_API_KEY,
+}
         self._lock       = threading.Lock()
         self._running    = False
         self._stop_flag  = False
