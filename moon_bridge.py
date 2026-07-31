@@ -104,6 +104,7 @@ root = tk.Tk(); root.withdraw()
 try:
     root.attributes("-topmost", True)
 except Exception:
+    # Some window managers reject -topmost; dialog still works without it.
     pass
 kind = sys.argv[1]
 if kind == "folder":
@@ -130,6 +131,7 @@ def native_dialog(kind: str) -> str:
                               capture_output=True, text=True, timeout=300)
         return proc.stdout.strip()
     except Exception:
+        # Subprocess timeout/crash or Tk missing — empty path is the safe UI answer.
         return ""
 
 

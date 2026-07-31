@@ -103,7 +103,10 @@ class ProxyPool:
                         elif len(parts) == 2:
                             ip, port = parts
                             loaded.append({"url": f"http://{ip}:{port}", "auth": None})
-                except Exception: continue
+                except Exception:
+                    # Malformed proxy line (wrong field count / non-numeric port) —
+                    # skip that line so one bad entry does not kill the whole pool load.
+                    continue
         self.proxies = loaded
         return len(loaded)
 
@@ -128,7 +131,9 @@ class ProxyPool:
         for s in self._sessions.values():
             if not s.closed:
                 try: await s.close()
-                except Exception: pass
+                except Exception:
+                    # Session already closed / transport half-dead during pool teardown.
+                    pass
         self._sessions.clear()
 
 _PROXY_POOL = ProxyPool()
@@ -606,6 +611,8 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrupted.")
     except Exception:
+        # Last-resort top-level trap: write crash_log.txt then exit 1 so
+        # GUI/CLI wrappers can surface the failure without a silent hang.
         crash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")
         with open(crash, "w", encoding="utf-8") as f: f.write(traceback.format_exc())
         traceback.print_exc()
