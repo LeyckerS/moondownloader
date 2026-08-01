@@ -16,7 +16,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 FENCE_RE = re.compile(r"```(?:bash|sh|text)?\n(.*?)```", re.DOTALL)
-FLAG_RE = re.compile(r"--[a-zA-Z][a-zA-Z-]*")
+FLAG_RE = re.compile(r"(?<![\w-])--?[a-zA-Z][a-zA-Z-]*")
 
 
 def _real_flags() -> set[str]:
