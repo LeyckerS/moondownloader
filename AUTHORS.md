@@ -13,7 +13,7 @@ first contribution:
 |:--|:--|
 | [@kushin25](https://github.com/kushin25) | `docs/CLI.md`, the CLI reference (#37) |
 | [@pollychen-lab](https://github.com/pollychen-lab) | moved the no-Chrome regression into a pytest suite (#38), then moved the download engine into a shared `moon_download.py` (#41) |
-| [@NanoRisk6](https://github.com/NanoRisk6) | pointed the documented verification commands at `pytest tests/` after the test move (#43) |
+| NanoRisk6 — *account no longer on GitHub* | pointed the documented verification commands at `pytest tests/` across six files after the test move (issue #43, commit `f9f8f74`) |
 | [@AdvaitVarhade](https://github.com/AdvaitVarhade) | made `--proxies` report missing files and skipped lines instead of failing silently (#48); narrowed `native_dialog`'s exception handling and documented four deliberate swallows (#54) |
 | [@Moferanoluwa](https://github.com/Moferanoluwa) | added `--version` and made both report flavours record which build wrote them (#61); corrected the `--proxies` documentation that #48 had made stale (#63) |
 
