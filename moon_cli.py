@@ -84,7 +84,10 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
     for url in urls:
         p = urlparse(url)
         raw_name = unquote(p.fragment or p.path.split("/")[-1]) or url
-        rec = telem.reg(url, _sanitize_filename(raw_name))
+        filename = _sanitize_filename(raw_name)
+        rec = telem.reg(url, filename)
+        if rec.filename != filename:
+            print(f"  [rename] {filename} -> {rec.filename} (filename collision)")
         await q.put((url, 1, rec))
 
     def mark_done():

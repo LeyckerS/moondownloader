@@ -212,11 +212,24 @@ class Telemetry:
         self.files: dict[str, FileRecord] = {}
         self.snapshots: list[dict] = []
         self.stall_events: list[dict] = []
+        self._reserved_filenames: set[str] = set()
         self._lock = threading.Lock()
 
     def reg(self, url: str, filename: str) -> FileRecord:
-        rec = FileRecord(url=url, filename=filename, queued_at=time.monotonic())
         with self._lock:
+            original = filename
+            stem, ext = os.path.splitext(filename)
+            index = 2
+            while filename.casefold() in self._reserved_filenames:
+                filename = f"{stem} ({index}){ext}"
+                index += 1
+            self._reserved_filenames.add(filename.casefold())
+
+            rec = FileRecord(url=url, filename=filename, queued_at=time.monotonic())
+            if filename != original:
+                rec.notes.append(
+                    f'filename collision: "{original}" renamed to "{filename}"'
+                )
             self.files[url] = rec
         return rec
 

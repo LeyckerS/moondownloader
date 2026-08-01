@@ -332,7 +332,12 @@ class Engine:
         for url in urls:
             p = urlparse(url)
             raw_name = unquote(p.fragment or p.path.split("/")[-1]) or url
-            rec = telem.reg(url, _sanitize_filename(raw_name))
+            filename = _sanitize_filename(raw_name)
+            rec = telem.reg(url, filename)
+            if rec.filename != filename:
+                self.log(
+                    f"  filename collision: {filename} -> {rec.filename}", "warn"
+                )
             await q.put((url, 1, rec))
 
         snap_stop = asyncio.Event()
