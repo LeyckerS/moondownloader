@@ -168,7 +168,8 @@ class Engine:
             kc       = kill_counts.get(orig_url, 0)
             kill_evt = asyncio.Event()
             ok, msg, bytes_done = await download_file(
-                proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc, telem=telem)
+                proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc,
+                telem=telem, on_event=self.log)
             rec.dl_s = max(time.monotonic()-rec.dl_start, 0.001)
 
             if ok:

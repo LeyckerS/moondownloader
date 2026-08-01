@@ -14,6 +14,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
+from typing import Callable
 
 import aiohttp
 
@@ -423,10 +424,17 @@ async def download_file(
     kill_evt: asyncio.Event,
     kills_so_far: int,
     telem: Telemetry | None = None,
+    on_event: Callable[[str, str], None] | None = None,
 ) -> tuple[bool, str, int]:
     """Download a single file with resume support, stall detection, and proxy rotation."""
     tmp = dest + ".tmp"
     loop = asyncio.get_running_loop()
+
+    def note(msg: str, tag: str = "warn") -> None:
+        """Record a mid-transfer event in the report and surface it live if a front-end is listening."""
+        rec.notes.append(msg)
+        if on_event:
+            on_event(msg, tag)
     detect = kills_so_far < STALL_MAX_KILL
 
     def _write(f, data: bytes):
@@ -452,6 +460,7 @@ async def download_file(
 
         try:
             dl_t0 = time.monotonic()
+            downloaded = resume
             req_kwargs = dict(headers=hdrs)
             if dl_proxy:
                 req_kwargs["proxy"] = dl_proxy
@@ -467,7 +476,7 @@ async def download_file(
                     return False, f"HTTP {r.status}", resume
                 if r.status == 200 and resume > 0:
                     resume = 0
-                    rec.notes.append(f"{rec.filename}: server ignored the resume request (HTTP 200) — restarting from zero")
+                    note(f"{rec.filename}: server ignored the resume request (HTTP 200) — restarting from zero")
 
                 file_size = int(r.headers.get("Content-Length", 0)) + resume
                 if file_size > 0:
@@ -551,20 +560,20 @@ async def download_file(
         except _StallKill:
             return False, "stall_killed", downloaded
         except (aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError):
-            rec.notes.append(f"connection dropped att {att+1}")
+            note(f"connection dropped att {att+1}", "retry")
             if att < DL_INNER_RETRIES - 1:
                 await asyncio.sleep(0.5 * (att + 1))
                 continue
             return False, "connection dropped", downloaded
         except asyncio.TimeoutError:
-            rec.notes.append(f"timeout att {att+1}")
+            note(f"timeout att {att+1}", "retry")
             if att < DL_INNER_RETRIES - 1:
                 await asyncio.sleep(1 + att)
                 continue
             return False, "timeout", downloaded
         except Exception as e:
             err = str(e)
-            rec.notes.append(f"error att {att+1}: {err}")
+            note(f"error att {att+1}: {err}", "retry")
             if att < DL_INNER_RETRIES - 1 and ("ContentLengthError" in err or "not enough data" in err.lower()):
                 await asyncio.sleep(0.5 * (att + 1))
                 continue

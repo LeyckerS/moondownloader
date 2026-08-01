@@ -136,7 +136,8 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             kc       = kill_counts.get(orig_url, 0)
             kill_evt = asyncio.Event()
             ok, msg, bytes_done = await download_file(
-                proxy_url, cookies, dest, rec, bytes_acc, kill_evt, kc)
+                proxy_url, cookies, dest, rec, bytes_acc, kill_evt, kc,
+                on_event=lambda msg, tag: print(f"  [{tag}] {msg}", flush=True))
             rec.dl_s = max(time.monotonic() - rec.dl_start, 0.001)
 
             if ok:
