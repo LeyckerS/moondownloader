@@ -23,7 +23,8 @@ of truth for the modern engine. `moon_engine.py` is that engine, standing on its
 
 The async engine itself was **not** rewritten. `_run`, `_browser_worker`, `_do_dl`,
 `download_file`, `Telemetry` and `ProxyPool` are the 14.8 code, plus the lazy browser
-launch described below.
+launch described below. `download_file`, `Telemetry` and `ProxyPool` now live in
+`moon_download.py`, shared by `moon_engine.py` and `moon_cli.py`.
 
 ## Startup
 
@@ -118,6 +119,7 @@ every number to its limits (`workers` 2–32, `dl_streams` 2–48, `retries` 0�
 | `moon_bridge.py` | window host, OS dialogs, `settings.json` |
 | `moon_engine.py` | the engine with no GUI + the JSON API |
 | `moon_extract.py` | extraction for both providers + the Chrome lifecycle + `BrowserGate` |
+| `moon_download.py` | the download engine, `Telemetry` and `ProxyPool`, shared by the GUI engine and CLI |
 | `web/index.html` | structure |
 | `web/styles.css` | everything visual |
 | `web/app.js` | rendering, the bridge, and a synthetic engine for the preview |
@@ -128,9 +130,10 @@ every number to its limits (`workers` 2–32, `dl_streams` 2–48, `retries` 0�
 | `integration_http.py` | end-to-end: browser ↔ loopback HTTP ↔ Engine |
 | `integration_web.py` | end-to-end: pywebview ↔ Engine |
 
-`moon_engine.py` and `moon_cli.py` each carry their own copy of the download engine
-(`download_file`, `Telemetry`, `ProxyPool`); the extraction layer, the Chrome lifecycle and
-the launch decision are shared through `moon_extract.py`.
+The download engine, telemetry and proxy rotation (`download_file`, `Telemetry`,
+`ProxyPool`) are shared through `moon_download.py`; the extraction layer, the Chrome
+lifecycle and the launch decision are shared through `moon_extract.py`. `moon_engine.py`
+and `moon_cli.py` both import from both.
 
 ---
 
