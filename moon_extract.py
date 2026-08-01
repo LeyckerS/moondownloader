@@ -223,6 +223,9 @@ DN_FILE_EXT = re.compile(
 
 DN_STEP1_GATE_TIMEOUT = 22.0
 DN_STEP2_TIMEOUT      = 420.0
+# Step 2 is a chain of buttons, not one button: each click can reveal the next.
+# The cap stops a page that cycles labels from being clicked until the deadline.
+DN_STEP2_MAX_CLICKS   = 4
 # Auto-click budget. After this the widget is left alone so a human sitting at the
 # headful window can tick it; DN_MANUAL_CAPTCHA_TIMEOUT is that grace period.
 DN_CAPTCHA_AUTO_TIMEOUT   = 45.0
@@ -724,9 +727,16 @@ async def _extract_datanodes_on_context(context, url: str,
         if await _dn_eval(page, DN_DEAD_JS, default=False):
             return None, None
 
-        # ── step 2: Turnstile + countdown, then one click on the trigger ───────
+        # ── step 2: Turnstile + countdown, then the trigger chain ─────────────
         for hard_fail_retry in range(2):        # one reload if Turnstile hard-fails
-            clicked        = False
+            # Not a boolean. datanodes serves the trigger as a *chain*: the first
+            # button ("Free Download / Standard Speed") only reveals the second
+            # ("Start Download / Your file is ready"), and only the second starts
+            # the transfer. A one-shot latch clicked the first, then watched the
+            # second sit there for the whole 420s budget -- the page was never
+            # unreadable, we simply refused to press it. Remember which labels
+            # were used instead, so each new one gets a click and a repeat does not.
+            clicked_labels : set[str] = set()
             solved_captcha = False
             last_sweep     = 0.0
             hard_failed    = False
@@ -769,11 +779,17 @@ async def _extract_datanodes_on_context(context, url: str,
                     solved_captcha = True
                     continue
 
-                if st["trigger"] and not clicked:
+                if st["trigger"] and st["trigger"] not in clicked_labels:
+                    if len(clicked_labels) >= DN_STEP2_MAX_CLICKS:
+                        # A page cycling labels would otherwise be clicked until the
+                        # deadline. Stop and let the caller retry from a clean page.
+                        _d(f"step-2 trigger chain exceeded {DN_STEP2_MAX_CLICKS} "
+                           f"distinct labels, last: {st['trigger']!r} — giving up")
+                        break
                     await _dn_eval(page, DN_OVERLAY_JS)
                     if await _dn_eval(page, DN_CLICK_JS, st["trigger"], default=False):
                         _d("clicked step-2 trigger:", st["trigger"])
-                        clicked = True
+                        clicked_labels.add(st["trigger"])
                 await asyncio.sleep(0.4)
 
             if not hard_failed:
