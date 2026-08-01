@@ -18,6 +18,7 @@ first contribution:
 | [@Moferanoluwa](https://github.com/Moferanoluwa) | added `--version` and made both report flavours record which build wrote them (#61); corrected the `--proxies` documentation that #48 had made stale (#63); brought `docs/ARCHITECTURE.md` in line with the shared download engine (#68); put CI on a 3.10/3.11/3.12 matrix with a `ruff` baseline (#69); made documentation-only pull requests verify their `moon_cli.py` examples against the real parser (#70); annotated the exception handlers in `moon_engine.py` and narrowed the report-save swallow (#71) |
 | [@RubenSanosh](https://github.com/RubenSanosh) | froze the elapsed-time clock when a run finishes, so the GUI stops counting after the last file lands (#73) |
 | [@darlenepolek](https://github.com/darlenepolek) | derived the CI byte-compile list from `git ls-files` so it can no longer drift, and made the lint workflow watch its own file (#77) |
+| [@XEDAB](https://github.com/XEDAB) | made a discarded partial download say so, instead of silently restarting a multi-gigabyte transfer when the server ignores a resume request (#98) |
 
 Dependabot handles the dependency and action bumps.
 

@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- **A partial download was discarded in silence.** When a server answers `200` instead of
+  `206` it is refusing the resume request, and the code correctly restarts from zero — but
+  said nothing, so a multi-gigabyte transfer appeared to begin again for no reason. The
+  restart is now recorded on the file's record and appears in `moontech_*.log`, with a
+  regression test that fakes the `200` response without touching the network
+  (#98, @XEDAB)
 - **The CI byte-compile list was hand-maintained and had drifted.** The job named
   "Byte-compile every module" compiled an explicit list that stopped at
   `tests/test_no_chrome.py`, so `moon_download.py` — the shared download engine both
