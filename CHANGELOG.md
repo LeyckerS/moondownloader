@@ -45,6 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- **The CI byte-compile list was hand-maintained and had drifted.** The job named
+  "Byte-compile every module" compiled an explicit list that stopped at
+  `tests/test_no_chrome.py`, so `moon_download.py` — the shared download engine both
+  front-ends import — was never compiled, along with two newer test files. It now derives
+  the list from `git ls-files '*.py'`, which cannot drift and pulls in nothing untracked.
+  The workflow also watches its own file now, so a change to it is actually checked
+  (#77, @darlenepolek)
+- The eight `except Exception:` handlers in the first slice of `moon_extract.py` are
+  narrowed or documented: the `curl_cffi` import guard catches `ImportError`, the
+  Playwright probes catch `PlaywrightError`, and the ones that must stay broad say why.
+  The deferred playwright import is preserved, so a fuckingfast-only batch still never
+  imports it (#82, @AdvaitVarhade)
 - **The elapsed-time clock kept counting after a run finished.** `snapshot()` computed
   `elapsed_s` from `now - t0` unconditionally, so the GUI carried on ticking once the last
   file had landed. The engine now records `_t_end` in `_on_done()` — the single exit point
