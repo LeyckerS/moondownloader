@@ -1025,9 +1025,11 @@ async def open_browser(pw, launch_args: list[str], headless: bool | None = None)
                 print(f"MoonDownloader: could not start {exe} on port {port}; "
                       "falling back to Playwright's Chromium.", file=sys.stderr)
                 return await pw.chromium.launch(**kw), False
+
+        from playwright.async_api import Error as PlaywrightError
         try:
             _CDP_BROWSER = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
-        except Exception as e:
+        except PlaywrightError as e:
             print(f"MoonDownloader: CDP attach failed ({str(e)[:70]}); "
                   "falling back to Playwright's Chromium.", file=sys.stderr)
             return await pw.chromium.launch(**kw), False
@@ -1080,7 +1082,7 @@ async def close_browser(browser, shared: bool | None = None) -> None:
     try:
         await browser.close()
     except Exception:
-        pass
+        pass  # best-effort close; browser may already be gone
 
 
 async def shutdown_chrome() -> None:
@@ -1091,17 +1093,17 @@ async def shutdown_chrome() -> None:
         try:
             await _CDP_BROWSER.close()
         except Exception:
-            pass
+            pass  # best-effort close during shutdown
         _CDP_BROWSER = None
     if _CHROME_PROC is not None:
         try:
             _CHROME_PROC.terminate()
             _CHROME_PROC.wait(timeout=8)
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError):
             try:
                 _CHROME_PROC.kill()
             except Exception:
-                pass
+                pass  # last-resort kill; nothing further we can do if this fails
         _CHROME_PROC = None
 
 
@@ -1182,7 +1184,7 @@ class BrowserGate:
                 try:
                     await pw.stop()
                 except Exception:
-                    pass
+                    pass  # best-effort driver stop during teardown
 
 
 # ── persistent shared context, bounded concurrency ─────────────────────────────
@@ -1222,7 +1224,7 @@ async def _drop_lanes() -> None:
         try:
             await ctx.close()
         except Exception:
-            pass
+            pass  # best-effort close; context may already be gone
     _lanes = []
     _lane_queue = None
 
@@ -1252,7 +1254,7 @@ async def acquire_lane(browser):
             try:
                 await ctx.close()
             except Exception:
-                pass
+                pass  # best-effort close of one-shot fallback context
         return
 
     await _lane_queue.get()
