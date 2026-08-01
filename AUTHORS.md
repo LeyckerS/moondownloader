@@ -21,6 +21,7 @@ first contribution:
 | [@XEDAB](https://github.com/XEDAB) | made a discarded partial download say so, instead of silently restarting a multi-gigabyte transfer when the server ignores a resume request (#98) |
 | [@tomatotomata](https://github.com/tomatotomata) | corrected the headless CLI example in `README.md`, which documented positional URLs and a `-o` flag the parser never accepted (#53) |
 | [@kocaemre](https://github.com/kocaemre) | taught the documentation guard to check single-dash flags, so it now catches the line it was written for (#104) |
+| [@Vam-si-krish](https://github.com/Vam-si-krish) | made an unsupported host fail on sight instead of being retried like a network error, and collapsed the host names to one definition shared by both front-ends (#108) |
 
 Dependabot handles the dependency and action bumps.
 
