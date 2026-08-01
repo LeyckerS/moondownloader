@@ -12,6 +12,10 @@ failed_links.txt
 proxies.txt
 logo.png
 
+# Written by the GUI on every settings change. Holds the datanodes API key
+# in clear text and the full pasted link list -- never commit it.
+settings.json
+
 # Downloaded media (safety net if run from repo dir)
 *.rar
 *.zip
