@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1] — 2026-08-01
+
 ### Added
 - **CI runs on Python 3.10, 3.11 and 3.12, and lints with `ruff`.** The matrix uses
   `fail-fast: false` so one version failing still reports the others. `ruff.toml` selects
@@ -45,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- The headless CLI example in `README.md` documented `python moon_cli.py <url> ... -o <folder>`:
+  positional URLs the parser never accepted, and a `-o` short flag that does not exist. It now
+  reads `--urls` / `--output`, which are the real flags and both required (#53, @tomatotomata)
+- **The documentation guard could not see the line it was written to catch.** `FLAG_RE` in
+  `tests/test_docs_cli_flags.py` matched only `--long` flags, so the bogus `-o` above passed
+  every check. It now validates single-dash flags against the parser as well (#104, @kocaemre)
 - **A partial download was discarded in silence.** When a server answers `200` instead of
   `206` it is refusing the resume request, and the code correctly restarts from zero — but
   said nothing, so a multi-gigabyte transfer appeared to begin again for no reason. The
