@@ -32,6 +32,9 @@ from moon_extract import (                       # noqa: E402
     HAVE_CURL_CFFI,
     DN_API_KEY,
     DN_LANES,
+    DATANODES_HOST,
+    FUCKINGFAST_HOST,
+    SUPPORTED_HOSTS,
 )
 
 if DN_API_KEY:
@@ -172,9 +175,10 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             print(f"  -> {filename[:60]}{suffix}")
 
             success = False
+            unsupported = False
             try:
                 parsed = urlparse(url)
-                if "fuckingfast.co" in parsed.netloc:
+                if FUCKINGFAST_HOST in parsed.netloc:
                     link = await extract_fuckingfast(url)
                     rec.extract_s = time.monotonic() - t_start
                     if not link:
@@ -186,7 +190,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
                         success = True
-                elif "datanodes.to" in parsed.netloc:
+                elif DATANODES_HOST in parsed.netloc:
                     # API key set -> single JSON GET, no browser, no captcha.
                     # get_browser() is where Chrome is actually launched, so a
                     # batch with no datanodes link never opens one. After that
@@ -204,10 +208,18 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
                         success = True
+                else:
+                    host = parsed.hostname or parsed.netloc or "(missing host)"
+                    rec.notes.append(f"unsupported host: {host}")
+                    print(
+                        f"  [fail] unsupported host: {host} — supported: "
+                        f"{', '.join(SUPPORTED_HOSTS)}"
+                    )
+                    unsupported = True
             except Exception as e:
                 print(f"  [error] {e}")
 
-            if not success and not is_re and attempt < max_retries:
+            if not success and not unsupported and not is_re and attempt < max_retries:
                 backoff = min(2**(attempt-1), 6)
                 print(f"  [retry in {backoff}s]")
                 await asyncio.sleep(backoff)

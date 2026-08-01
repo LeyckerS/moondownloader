@@ -69,6 +69,9 @@ from moon_extract import (                       # noqa: E402
     HAVE_CURL_CFFI,
     DN_API_KEY,
     DN_LANES,
+    DATANODES_HOST,
+    FUCKINGFAST_HOST,
+    SUPPORTED_HOSTS,
 )
 import moon_extract as _moon_extract            # noqa: E402
 
@@ -216,9 +219,10 @@ class Engine:
                 self._track(rec)
 
                 success = False
+                unsupported = False
                 try:
                     parsed = urlparse(url)
-                    if "fuckingfast.co" in parsed.netloc:
+                    if FUCKINGFAST_HOST in parsed.netloc:
                         link = await extract_fuckingfast(url)
                         rec.extract_s = time.monotonic()-t_start
                         if not link:
@@ -237,7 +241,7 @@ class Engine:
                             my_tasks.append(t)
                             async with tasks_lock: all_tasks.append(t)
                             success = True
-                    elif "datanodes.to" in parsed.netloc:
+                    elif DATANODES_HOST in parsed.netloc:
                         # API key set -> single JSON GET, no browser, no captcha.
                         # get_browser() is where Chrome is actually launched, so a
                         # batch with no datanodes link never opens one. After that
@@ -263,13 +267,23 @@ class Engine:
                             my_tasks.append(t)
                             async with tasks_lock: all_tasks.append(t)
                             success = True
+                    else:
+                        host = parsed.hostname or parsed.netloc or "(missing host)"
+                        rec.notes.append(f"unsupported host: {host}")
+                        self.log(
+                            f"    ✗  unsupported host: {host} — supported: "
+                            f"{', '.join(SUPPORTED_HOSTS)}",
+                            "fail",
+                        )
+                        unsupported = True
                 except Exception as e:
                     # One URL's extraction/scheduling failed for any reason (network,
                     # parsing, Chrome/CDP); the worker loop must keep serving the queue.
                     rec.notes.append(f"exception: {e}")
                     self.log(f"    ✗  {e}", "fail")
 
-                if not success and not is_re and attempt < max_retries and not self._get("_stop_flag"):
+                if (not success and not unsupported and not is_re and attempt < max_retries
+                        and not self._get("_stop_flag")):
                     backoff = min(2**(attempt-1), 6)
                     self.log(f"    ↻  retry in {backoff}s", "warn")
                     await asyncio.sleep(backoff)

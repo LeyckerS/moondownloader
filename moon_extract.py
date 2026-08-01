@@ -49,6 +49,10 @@ from urllib.parse import urlparse, unquote
 
 DEBUG = bool(os.environ.get("MOON_DEBUG"))
 
+DATANODES_HOST = "datanodes.to"
+FUCKINGFAST_HOST = "fuckingfast.co"
+SUPPORTED_HOSTS = (DATANODES_HOST, FUCKINGFAST_HOST)
+
 
 def _d(*a):
     if DEBUG:
@@ -57,7 +61,7 @@ def _d(*a):
 
 # ══ fuckingfast.co ════════════════════════════════════════════════════════════
 
-FF_HOST        = "https://fuckingfast.co"
+FF_HOST        = f"https://{FUCKINGFAST_HOST}"
 FF_ID_RE       = re.compile(r"^[A-Za-z0-9]{6,32}$")
 FF_DL_RE       = re.compile(r"https://(?:dl\.)?fuckingfast\.co/dl/[A-Za-z0-9_\-]{16,}")
 FF_RETRIES     = 3
@@ -205,7 +209,7 @@ DN_BLOCKED_RES = {"image", "media", "font"}
 DN_ALWAYS_ALLOW = (
     "challenges.cloudflare.com",   # Turnstile — step 2 cannot pass without it
     "cdn-cgi/challenge-platform",  # Cloudflare JS detections
-    "datanodes.to",
+    DATANODES_HOST,
 )
 
 # Pure telemetry only. Nothing ad-shaped, on purpose.

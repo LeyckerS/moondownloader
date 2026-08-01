@@ -19,6 +19,7 @@ import moon_engine
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FF = [f"https://fuckingfast.co/x{n}/pack.part{n:02d}.rar" for n in range(1, 4)]
 DN = ["https://datanodes.to/y1/pack.part99.rar"]
+UNSUPPORTED = ["https://youtube.com/watch?v=unsupported"]
 FRONT_ENDS = ("moon_engine.py", "moon_cli.py")
 DOWNLOAD_DEFS = (
     "async def download_file",
@@ -27,7 +28,7 @@ DOWNLOAD_DEFS = (
 )
 
 
-def run_engine(engine, urls) -> dict:
+def run_engine(engine, urls, retries=1) -> dict:
     res = engine.start(
         {
             "links": urls,
@@ -35,7 +36,7 @@ def run_engine(engine, urls) -> dict:
             "out_folder": str(ROOT / "_tmp_out"),
             "workers": 4,
             "dl_streams": 4,
-            "retries": 1,
+            "retries": retries,
         }
     )
     assert not res.get("error"), f"start refused: {res['error']}"
@@ -48,9 +49,9 @@ def run_engine(engine, urls) -> dict:
     return {"ok": metrics["ok"], "fail": metrics["fail"]}
 
 
-def run_cli(urls) -> dict:
+def run_cli(urls, retries=1) -> dict:
     with tempfile.TemporaryDirectory() as out:
-        asyncio.run(moon_cli.run(urls, out, 4, 4, 1, "proxies.txt"))
+        asyncio.run(moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"))
         done = len(os.listdir(out))
     return {"ok": len(urls) if done == 0 else done, "fail": 0}
 
@@ -98,6 +99,29 @@ def test_engine_mixed_batch_launches_one_shared_browser(browser_calls):
         cleanup()
 
 
+def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
+    engine = moon_engine.Engine()
+
+    try:
+        result = run_engine(engine, UNSUPPORTED, retries=3)
+        snapshot = engine.snapshot(0)
+        messages = [message for message, _tag in snapshot["log"]]
+        record = engine._tracked[UNSUPPORTED[0]]
+
+        assert result == {"ok": 0, "fail": 1}
+        assert browser_calls["open_browser"] == 0
+        assert browser_calls["playwright"] == 0
+        assert record.status == "fail"
+        assert record.notes == ["unsupported host: youtube.com"]
+        assert any(
+            "unsupported host: youtube.com — supported: datanodes.to, fuckingfast.co" in message
+            for message in messages
+        )
+        assert not any("retry in" in message for message in messages)
+    finally:
+        cleanup()
+
+
 def test_cli_fuckingfast_only_launches_no_browser(browser_calls):
     try:
         result = run_cli(FF)
@@ -110,6 +134,19 @@ def test_cli_mixed_batch_launches_one_shared_browser(browser_calls):
     try:
         result = run_cli(FF + DN)
         assert_browser_counts(result, browser_calls, FF + DN, want_browsers=1)
+    finally:
+        cleanup()
+
+
+def test_cli_unsupported_host_fails_once_without_browser(browser_calls, capsys):
+    try:
+        run_cli(UNSUPPORTED, retries=3)
+        output = capsys.readouterr().out
+
+        assert browser_calls["open_browser"] == 0
+        assert browser_calls["playwright"] == 0
+        assert "unsupported host: youtube.com — supported: datanodes.to, fuckingfast.co" in output
+        assert "retry in" not in output
     finally:
         cleanup()
 
