@@ -15,7 +15,7 @@ first contribution:
 | [@pollychen-lab](https://github.com/pollychen-lab) | moved the no-Chrome regression into a pytest suite (#38), then moved the download engine into a shared `moon_download.py` (#41) |
 | NanoRisk6 — *account no longer on GitHub* | pointed the documented verification commands at `pytest tests/` across six files after the test move (issue #43, commit `f9f8f74`) |
 | [@AdvaitVarhade](https://github.com/AdvaitVarhade) | made `--proxies` report missing files and skipped lines instead of failing silently (#48); narrowed `native_dialog`'s exception handling and documented four deliberate swallows (#54) |
-| [@Moferanoluwa](https://github.com/Moferanoluwa) | added `--version` and made both report flavours record which build wrote them (#61); corrected the `--proxies` documentation that #48 had made stale (#63) |
+| [@Moferanoluwa](https://github.com/Moferanoluwa) | added `--version` and made both report flavours record which build wrote them (#61); corrected the `--proxies` documentation that #48 had made stale (#63); brought `docs/ARCHITECTURE.md` in line with the shared download engine (#68); put CI on a 3.10/3.11/3.12 matrix with a `ruff` baseline (#69); made documentation-only pull requests verify their `moon_cli.py` examples against the real parser (#70); annotated the exception handlers in `moon_engine.py` and narrowed the report-save swallow (#71) |
 
 Dependabot handles the dependency and action bumps.
 

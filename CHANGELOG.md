@@ -12,6 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CI runs on Python 3.10, 3.11 and 3.12, and lints with `ruff`.** The matrix uses
+  `fail-fast: false` so one version failing still reports the others. `ruff.toml` selects
+  `E`/`F`/`W`/`I` and parks the rules that fire on the codebase as it stands, each with its
+  count and the reason — the goal is a baseline that catches regressions, not a reformat
+  (#69, @Moferanoluwa)
+- **Documentation-only pull requests are checked against the real CLI parser.** A new
+  `Docs CLI Check` workflow triggers on `**.md` and runs `tests/test_docs_cli_flags.py`,
+  which reads the true flag set from `moon_cli.py --help` at test time and fails on any
+  `moon_cli.py` invocation in a tracked Markdown file that uses a flag the parser does not
+  accept. Reading `--help` rather than hardcoding means adding a flag never requires
+  touching the test (#70, @Moferanoluwa)
+- `CONTRIBUTING.md` states what counts as a contribution here, what gets labelled `invalid`
+  or `spam`, and that the bar does not move during Hacktoberfest (#72)
 - `docs/CLI.md` — a reference for `moon_cli.py`: every flag, its default, and what it
   actually controls (#37, @kushin25)
 - `moon_cli.py --version`, and the version is now recorded in both report flavours: the
@@ -32,8 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- `docs/ARCHITECTURE.md` still said `moon_engine.py` and `moon_cli.py` each carry their own
+  copy of the download engine. #41 made that untrue; the file table and the closing summary
+  now describe `moon_download.py` (#68, @Moferanoluwa)
+- The three `except Exception:` handlers in `moon_engine.py` now say why they are there. The
+  report-save handler is narrowed to `except (OSError, TypeError)` — a write failure or a
+  non-serializable field — instead of swallowing everything after a run that succeeded
+  (#71, @Moferanoluwa)
+- `AUTHORS.md` linked to a contributor profile that no longer exists, and cited an issue
+  number in a column that otherwise lists merged pull requests. The contribution stays
+  credited; only the dead link and the reference were corrected (#67)
 - The documented verification commands pointed at `python test_no_chrome.py`, which stopped
-  existing when the tests moved. They now point at `pytest tests/` (#43, @NanoRisk6)
+  existing when the tests moved. They now point at `pytest tests/` (#43, NanoRisk6)
 - `native_dialog` swallowed every exception, including a broken `_DIALOG_SRC`. It now catches
   only `subprocess.TimeoutExpired` and `OSError`, so a real failure surfaces instead of
   returning an empty path. Four other deliberate swallows in `moon_bridge.py`, `moon_cli.py`
