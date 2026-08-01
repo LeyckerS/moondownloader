@@ -115,6 +115,7 @@ class Engine:
         self._dls        = 0
         self._bytes_acc  : collections.deque = collections.deque(maxlen=200000)
         self._t0         = 0.0
+        self._t_end      = 0.0
         self._proxies    = 0
 
         # Live FileRecord registry: the GUI reads these objects every snapshot,
@@ -390,6 +391,7 @@ class Engine:
             self._running = False
             self._stop_flag = False
             self._state = "done"
+            self._t_end = time.monotonic()
 
     def scan_tmp(self) -> int:
         folder = self._cfg["out_folder"]
@@ -467,6 +469,7 @@ class Engine:
             self._ok = 0; self._fail = 0; self._kills = 0
             self._browsers = 0; self._dls = 0
             self._bytes_acc.clear(); self._t0 = time.monotonic()
+            self._t_end = 0.0
             self._tracked.clear()
         with self._log_lock:
             self._log_ring.clear(); self._log_total = 0
@@ -558,6 +561,7 @@ class Engine:
             state    = self._state
             running  = self._running
             t0       = self._t0
+            t_end    = self._t_end
             url_done = self._url_done; url_tot = self._url_total
             dl_done  = self._dl_done;  dl_tot  = self._dl_total
             ok       = self._ok; fail = self._fail
@@ -580,7 +584,7 @@ class Engine:
         else:
             eta = 0.0
 
-        el = (now - t0) if t0 else 0.0
+        el = (t_end - t0) if t_end else ((now - t0) if t0 else 0.0)
         # No phase sentence here on purpose: the GUI owns wording and language,
         # so the engine ships numbers and a stage name instead of prose.
         if not running and state == "idle":
