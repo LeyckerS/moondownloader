@@ -68,7 +68,7 @@ FALLBACK_UA    = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 try:
     from curl_cffi import AsyncSession as _CurlSession
     HAVE_CURL_CFFI = True
-except Exception:                                    # pragma: no cover
+except ImportError:                                  # pragma: no cover
     _CurlSession = None
     HAVE_CURL_CFFI = False
 
@@ -99,7 +99,7 @@ async def close_ff_session():
         try:
             await _FF_SESSION.close()
         except Exception:
-            pass
+            pass  # best-effort cleanup during shutdown
         _FF_SESSION = None
 
 
@@ -186,6 +186,7 @@ async def extract_fuckingfast(url: str) -> str | None:
                 return m.group()
             _d(f"ff {file_id}: status={status} no hx-redirect")
         except Exception as e:
+            # network or parsing error triggers a retry
             _d(f"ff {file_id}: {type(e).__name__} {e}")
 
         if attempt + 1 < FF_RETRIES:
@@ -373,9 +374,10 @@ def dn_launch_kwargs(launch_args: list[str], headless: bool | None = None) -> di
 
 async def prepare_datanodes_context(context) -> None:
     """Install the stealth init script on a context before any datanodes page loads."""
+    from playwright.async_api import Error as PlaywrightError
     try:
         await context.add_init_script(DN_STEALTH_JS)
-    except Exception:
+    except PlaywrightError:
         pass
 
 
@@ -385,10 +387,11 @@ async def _dn_eval(page, js, arg=None, default=None, tries: int = 4):
     *Step 1 is a form-POST navigation, so Playwright will raise "Execution context
     was destroyed" on any probe that overlaps it. Retry instead of trusting.*
     """
+    from playwright.async_api import Error as PlaywrightError
     for i in range(tries):
         try:
             return await (page.evaluate(js, arg) if arg is not None else page.evaluate(js))
-        except Exception as e:
+        except PlaywrightError as e:
             msg = str(e)
             if ("Execution context was destroyed" not in msg
                     and "Target closed" not in msg and "navigation" not in msg):
@@ -469,6 +472,7 @@ async def extract_datanodes_api(url: str, api_key: str | None = None) -> str | N
             async with host_sess().get(target) as r:
                 payload = await r.json(content_type=None)
     except Exception as e:
+        # swallow network/JSON errors and fall back to scraping
         _d("dn api error:", type(e).__name__, str(e)[:90])
         return None
 
@@ -520,6 +524,7 @@ async def _dn_click_turnstile(page) -> str:
     Playwright's locator click and page.mouse.* both go through CDP
     Input.dispatchMouseEvent, which the widget accepts.*
     """
+    from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
     # Preferred: let Playwright reach into the cross-origin challenge frame. Guard
     # on the iframe existing first — frame_locator waits out its full timeout per
     # selector otherwise, which burns 12s an attempt for nothing.
@@ -534,7 +539,7 @@ async def _dn_click_turnstile(page) -> str:
                 target = frame.locator(sel).first
                 await target.click(timeout=4000)
                 return f"frame:{sel}"
-            except Exception:
+            except (PlaywrightError, PlaywrightTimeoutError):
                 continue
 
     # Fallback: real mouse at the widget's checkbox, with some pointer entropy
@@ -553,7 +558,7 @@ async def _dn_click_turnstile(page) -> str:
         await asyncio.sleep(0.2)
         await page.mouse.click(cx, cy, delay=95)
         return f"mouse:({cx:.0f},{cy:.0f})"
-    except Exception as e:
+    except (PlaywrightError, PlaywrightTimeoutError) as e:
         _d("turnstile click failed:", str(e)[:70])
         return ""
 
