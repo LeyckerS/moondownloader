@@ -263,6 +263,8 @@ class Engine:
                             async with tasks_lock: all_tasks.append(t)
                             success = True
                 except Exception as e:
+                    # One URL's extraction/scheduling failed for any reason (network,
+                    # parsing, Chrome/CDP); the worker loop must keep serving the queue.
                     rec.notes.append(f"exception: {e}")
                     self.log(f"    ✗  {e}", "fail")
 
@@ -368,7 +370,10 @@ class Engine:
             lp, jp = telem.save(base)
             self.log(f"📊  {os.path.basename(lp)}", "info")
             self.log(f"📊  {os.path.basename(jp)}", "info")
-        except Exception as e:
+        except (OSError, TypeError) as e:
+            # OSError: can't open/write the report files (permissions, disk full, bad
+            # path). TypeError: json.dump choking on a non-serializable field. The run's
+            # downloads already completed; a report-write failure shouldn't crash finalize.
             self.log(f"⚠  Log save error: {e}", "warn")
 
         if output_links and mode == "links":
@@ -503,6 +508,8 @@ class Engine:
         try:
             asyncio.run(self._run(urls, n, d, r))
         except Exception:
+            # Top-level guard for a background thread: anything that escapes _run()
+            # would otherwise vanish silently instead of surfacing to the GUI/CLI.
             self.log(f"✗  engine crash: {traceback.format_exc(limit=3)}", "fail")
             self._on_done()
 
