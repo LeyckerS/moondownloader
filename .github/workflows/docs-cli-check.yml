@@ -1,0 +1,31 @@
+name: Docs CLI Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.md"
+      - "**.py"
+      - ".github/workflows/docs-cli-check.yml"
+  pull_request:
+    paths:
+      - "**.md"
+      - "**.py"
+
+jobs:
+  docs-cli-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install engine dependencies
+        run: pip install "aiohttp>=3.9" "curl_cffi>=0.7" "pytest==8.*"
+
+      - name: Verify documented moon_cli.py flags exist
+        run: pytest tests/test_docs_cli_flags.py -q
