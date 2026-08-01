@@ -27,12 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Byte-compile every module
-        run: |
-          python -m compileall -q \
-            moon_engine.py moon_cli.py \
-            moon_extract.py moon_bridge.py render_gui.py \
-            integration_http.py integration_web.py \
-            tests/conftest.py tests/test_no_chrome.py
+        run: git ls-files '*.py' | xargs python -m compileall -q
 
       - name: Install ruff
         run: pip install "ruff==0.16.1"
