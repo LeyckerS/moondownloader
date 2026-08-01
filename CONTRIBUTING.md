@@ -26,6 +26,36 @@ work all run anywhere, and the no-Chrome test suite stubs the browser and the ne
 
 Comment on an issue before you start, so two people don't write the same patch.
 
+## What counts as a contribution here
+
+Every open issue is written out with the files to touch and the acceptance criteria, and
+[the roadmap](https://github.com/LeyckerS/moondownloader/issues/39) ranks them by size and by
+whether they need Windows. If you work from that list you will not go wrong.
+
+A pull request gets merged when it does at least one of these:
+
+- closes an open issue
+- fixes something demonstrably broken, with the reproduction in the description
+- documents existing behaviour **accurately** — checked against the code, not against the docs
+
+A pull request gets labelled `invalid` or `spam` and closed when it does none of them. In
+practice that means: whitespace and reformatting on their own, files nobody asked for,
+rewording that does not change meaning, and one-line edits opened to raise a contribution
+count. This is not about size — several of the merged contributions here are under ten lines.
+It is about whether anything is actually better afterwards.
+
+If you are not sure whether an idea qualifies, open an issue and ask. That costs you nothing
+and it is a contribution in itself if the answer is yes.
+
+### Hacktoberfest
+
+This repository takes part. Issues open to participants carry the `hacktoberfest` label, and
+accepted pull requests get `hacktoberfest-accepted`.
+
+The bar above does not move during October. Low-effort pull requests are labelled `spam` per
+the Hacktoberfest rules, which counts against the author. There is real, scoped, reviewed work
+on the roadmap — take that instead, and you get a merged change worth putting your name on.
+
 ## Architecture
 
 Two front-ends, one engine, one extraction layer.
