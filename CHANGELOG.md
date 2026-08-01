@@ -47,6 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- **Datanodes extraction hung on every link and failed silently.** The host now serves step 2
+  as a chain — *Free Download / Standard Speed* reveals *Start Download / Your file is ready*,
+  and only the second starts the transfer — while the trigger handler latched after one click.
+  The page was never unreadable: `DN_STEP2_JS` matched the new button on every poll and the
+  latch discarded it, so each link burned the full 420s budget and returned nothing. The
+  handler now tracks which labels it has clicked instead of whether it has clicked, so each
+  new trigger in the chain gets exactly one press, capped by `DN_STEP2_MAX_CLICKS` (#111)
 - **An unsupported host was retried like a network failure.** A link from any host the
   program does not handle matched neither dispatcher branch, so nothing ran, nothing was
   logged, and the URL went back on the queue to be tried again with backoff — burning two
