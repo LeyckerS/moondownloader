@@ -1,0 +1,19 @@
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # line length - handled above via line-length instead
+    # Everything below fires on the codebase as it stands today. Per the issue that
+    # introduced this file: the goal is a green baseline that catches regressions, not
+    # a reformat, so these are parked here rather than fixed inline. Each is a real,
+    # pre-existing pattern (counts below from `ruff check .` before this ignore list):
+    "E702",  # multiple-statements-on-one-line-semicolon (58) - dense assignment style throughout moon_engine.py/moon_download.py
+    "E701",  # multiple-statements-on-one-line-colon (19) - same dense style
+    "I001",  # unsorted-imports (9) - several are deliberately grouped after a sys.path.insert, not just unsorted
+    "E402",  # module-import-not-at-top-of-file (5) - deferred/lazy imports inside functions
+    "E401",  # multiple-imports-on-one-line (4) - e.g. `import os, sys, asyncio, threading, argparse`
+    "E741",  # ambiguous-variable-name (2) - `l` as a loop variable in two spots
+    "F401",  # unused-import (1) - tests/test_proxy_pool.py imports pytest without using it directly
+]
