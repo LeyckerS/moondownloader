@@ -467,6 +467,7 @@ async def download_file(
                     return False, f"HTTP {r.status}", resume
                 if r.status == 200 and resume > 0:
                     resume = 0
+                    rec.notes.append(f"{rec.filename}: server ignored the resume request (HTTP 200) — restarting from zero")
 
                 file_size = int(r.headers.get("Content-Length", 0)) + resume
                 if file_size > 0:
