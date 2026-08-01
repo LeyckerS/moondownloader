@@ -1,4 +1,4 @@
-aiohttp>=3.9
+aiohttp>=3.14.3
 playwright>=1.40
 curl_cffi>=0.7        # Chrome TLS fingerprint - required for fuckingfast.co
 # pywebview is NOT needed: the GUI runs in Edge/Chrome (--app) served by moon_bridge.py.
