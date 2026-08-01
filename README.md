@@ -230,7 +230,29 @@ Full write-up: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [Engineering notes](docs/ENGINEERING_NOTES.md) | the measurements behind the design decisions |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 403s, Turnstile failures, CDP conflicts, stalls |
 | [FAQ](docs/FAQ.md) | why curl_cffi is mandatory, what `--browsers` means |
+| [Contributing](CONTRIBUTING.md) | architecture, what counts as a contribution, the verification commands |
 | [Changelog](CHANGELOG.md) | every version since 14.0 |
+
+---
+
+## 🤝 Contributing
+
+**[→ The roadmap](https://github.com/LeyckerS/moondownloader/issues/39)** — everything open, ranked by
+how hard it is and whether it needs Windows.
+
+Most of the open work does **not** require a Windows machine. Documentation, CI, tests and dependency
+work all run on Linux and macOS, and the test suite stubs Chrome and the network at the `moon_extract`
+boundary, so it runs anywhere. Each issue says up front which it is.
+
+| | |
+|:--|:--|
+| [good first issue](https://github.com/LeyckerS/moondownloader/labels/good%20first%20issue) | scoped small, with the files to touch and the acceptance criteria already written out |
+| [help wanted](https://github.com/LeyckerS/moondownloader/labels/help%20wanted) | everything open to outside contributors, including the larger items |
+
+Claim one by commenting on it in your own words — no need to ask permission first. What gets a pull
+request merged, and what gets one sent back, is written out in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Everyone who has shipped a change is named in [AUTHORS.md](AUTHORS.md) with what they did.
 
 ---
 
