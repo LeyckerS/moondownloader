@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- **The elapsed-time clock kept counting after a run finished.** `snapshot()` computed
+  `elapsed_s` from `now - t0` unconditionally, so the GUI carried on ticking once the last
+  file had landed. The engine now records `_t_end` in `_on_done()` — the single exit point
+  for both a normal finish and a crash — resets it in `start()`, and freezes `elapsed_s` at
+  `t_end - t0` once a run has ended (#73, @RubenSanosh)
 - `docs/ARCHITECTURE.md` still said `moon_engine.py` and `moon_cli.py` each carry their own
   copy of the download engine. #41 made that untrue; the file table and the closing summary
   now describe `moon_download.py` (#68, @Moferanoluwa)
