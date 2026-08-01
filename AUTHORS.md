@@ -18,10 +18,12 @@ first contribution:
 | [@Moferanoluwa](https://github.com/Moferanoluwa) | added `--version` and made both report flavours record which build wrote them (#61); corrected the `--proxies` documentation that #48 had made stale (#63); brought `docs/ARCHITECTURE.md` in line with the shared download engine (#68); put CI on a 3.10/3.11/3.12 matrix with a `ruff` baseline (#69); made documentation-only pull requests verify their `moon_cli.py` examples against the real parser (#70); annotated the exception handlers in `moon_engine.py` and narrowed the report-save swallow (#71) |
 | [@RubenSanosh](https://github.com/RubenSanosh) | froze the elapsed-time clock when a run finishes, so the GUI stops counting after the last file lands (#73) |
 | [@darlenepolek](https://github.com/darlenepolek) | derived the CI byte-compile list from `git ls-files` so it can no longer drift, and made the lint workflow watch its own file (#77) |
-| [@XEDAB](https://github.com/XEDAB) | made a discarded partial download say so, instead of silently restarting a multi-gigabyte transfer when the server ignores a resume request (#98) |
+| [@XEDAB](https://github.com/XEDAB) | made a discarded partial download say so, instead of silently restarting a multi-gigabyte transfer when the server ignores a resume request (#98); gave `download_file` a way to reach the live log, so mid-transfer failures stop being invisible until the run ends — and fixed an `UnboundLocalError` reachable whenever a connection timed out before the first byte (#120) |
 | [@tomatotomata](https://github.com/tomatotomata) | corrected the headless CLI example in `README.md`, which documented positional URLs and a `-o` flag the parser never accepted (#53) |
 | [@kocaemre](https://github.com/kocaemre) | taught the documentation guard to check single-dash flags, so it now catches the line it was written for (#104) |
 | [@Vam-si-krish](https://github.com/Vam-si-krish) | made an unsupported host fail on sight instead of being retried like a network error, and collapsed the host names to one definition shared by both front-ends (#108) |
+| [@felix-windsor](https://github.com/felix-windsor) | stopped two links with the same filename from sharing one `.tmp` and corrupting each other, by reserving destination names at registration (#119) |
+| [@AashishGupta2007](https://github.com/AashishGupta2007) | narrowed and documented the eight exception handlers in the Chrome-lifecycle slice of `moon_extract.py` (#118) |
 
 Dependabot handles the dependency and action bumps.
 

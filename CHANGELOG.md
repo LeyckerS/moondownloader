@@ -47,6 +47,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change from here on, and the two copies can no longer drift apart
 
 ### Fixed
+- **Two links resolving to the same filename shared one `.tmp` and corrupted each other.** The
+  destination was derived from the filename alone, so two transfers opened the same partial
+  file and raced to rename it — visible on Windows as `WinError 32`, silent on POSIX, where
+  `os.replace` does not refuse and the interleaved survivor was reported `ok`. Names are now
+  reserved case-insensitively when each record is registered, before either transfer is
+  scheduled, and the rename is reported in both front-ends (#119, @felix-windsor)
+- **Mid-transfer failures never reached the screen.** A dead proxy, a dropped connection or a
+  refused resume wrote a note that only appeared in `moontech_*.log` after the run, so a run
+  sat at `0 KB/s` with no explanation. `download_file` now takes an optional `on_event`
+  callback; the engine passes its log, the CLI prints, and the report keeps everything it had.
+  Also fixes an `UnboundLocalError` when a connection failed before the first byte arrived
+  (#120, @XEDAB)
+- The eight `except Exception:` handlers in the Chrome-lifecycle slice of `moon_extract.py`
+  are narrowed or explained; the CDP attach now catches `PlaywrightError` and the Chrome
+  process teardown `(subprocess.TimeoutExpired, OSError)` (#118, @AashishGupta2007)
 - **Datanodes extraction hung on every link and failed silently.** The host now serves step 2
   as a chain — *Free Download / Standard Speed* reveals *Start Download / Your file is ready*,
   and only the second starts the transfer — while the trigger handler latched after one click.
