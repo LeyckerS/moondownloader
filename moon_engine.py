@@ -132,6 +132,8 @@ class Engine:
 
         self._alive  = True
         self._thread = None
+        self._loop   = None
+        self._gate   = None
 
     def _inc(self, attr, delta=1):
         with self._lock: setattr(self, attr, getattr(self, attr) + delta)
@@ -335,11 +337,17 @@ class Engine:
         # fuckingfast is pure HTTP: no browser, no profile, not even the Playwright
         # driver. Chrome opens on the first datanodes link and not before - a
         # fuckingfast-only batch never launches one.
+        browser_started = False
+
         def _chrome_starting():
+            nonlocal browser_started
+            browser_started = True
             self._inc("_browsers")
             self.log("   datanodes: starting Chrome...", "dim")
 
         gate = BrowserGate(LAUNCH_ARGS, on_open=_chrome_starting)
+        with self._lock:
+            self._loop, self._gate = asyncio.get_running_loop(), gate
 
         async def _launch(wid):
             await self._browser_worker(
@@ -350,7 +358,7 @@ class Engine:
         try:
             await asyncio.gather(*[asyncio.create_task(_launch(i)) for i in range(n_workers)])
         finally:
-            if gate.opened:
+            if browser_started:
                 self._inc("_browsers", -1)
             await gate.aclose()
 
@@ -515,14 +523,33 @@ class Engine:
             # would otherwise vanish silently instead of surfacing to the GUI/CLI.
             self.log(f"✗  engine crash: {traceback.format_exc(limit=3)}", "fail")
             self._on_done()
+        finally:
+            with self._lock:
+                self._loop = None
+                self._gate = None
 
-    def stop(self) -> dict:
-        if not self._get("_running"):
-            return {"ok": True}
+    def stop(self, timeout: float = 1.5) -> dict:
+        running = self._get("_running")
+        if running:
+            with self._lock:
+                self._stop_flag = True
+                self._state = "stopping"
+            self.log("⏹  stop requested — finishing the downloads in flight...", "warn")
+
         with self._lock:
-            self._stop_flag = True
-            self._state = "stopping"
-        self.log("⏹  stop requested — finishing the downloads in flight...", "warn")
+            loop, gate, thread = self._loop, self._gate, self._thread
+        deadline = time.monotonic() + max(0.0, timeout)
+
+        if running and loop is not None and gate is not None and loop.is_running():
+            try:
+                future = asyncio.run_coroutine_threadsafe(gate.aclose(), loop)
+                future.result(timeout=max(0.0, deadline - time.monotonic()))
+            except Exception:
+                pass
+
+        if (running and thread is not None and thread is not threading.current_thread()
+                and thread.is_alive()):
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
         return {"ok": True}
 
     def _files_payload(self) -> list[dict]:

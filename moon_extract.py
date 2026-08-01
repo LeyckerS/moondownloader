@@ -1136,7 +1136,8 @@ class BrowserGate:
     inside a single asyncio.run()/engine run, never hand one across two.*
     """
 
-    __slots__ = ("_args", "_headless", "_on_open", "_lock", "_pw", "_browser", "_shared")
+    __slots__ = ("_args", "_headless", "_on_open", "_lock", "_pw", "_browser", "_shared",
+                 "_closed")
 
     def __init__(self, launch_args: list[str], *, headless: bool | None = None,
                  on_open=None) -> None:
@@ -1147,6 +1148,7 @@ class BrowserGate:
         self._pw       = None
         self._browser  = None
         self._shared   = False
+        self._closed   = False
 
     @property
     def opened(self) -> bool:
@@ -1154,9 +1156,13 @@ class BrowserGate:
 
     async def get(self):
         """The shared browser, launching Playwright + Chrome on the first call."""
+        if self._closed:
+            raise RuntimeError("browser gate is closed")
         if self._browser is not None:
             return self._browser
         async with self._lock:
+            if self._closed:
+                raise RuntimeError("browser gate is closed")
             if self._browser is None:
                 if self._on_open is not None:
                     self._on_open()
@@ -1171,6 +1177,7 @@ class BrowserGate:
         """Tear down browser then driver, in that order. No-op if nothing opened."""
         async with self._lock:
             browser, pw, shared = self._browser, self._pw, self._shared
+            self._closed  = True
             self._browser = None
             self._pw      = None
             if browser is not None:
