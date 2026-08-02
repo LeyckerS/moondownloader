@@ -711,7 +711,7 @@ class Engine:
             proxies, skipped = _PROXY_POOL.load(self.proxy_path, is_default=True)
             # Handle whether load() returned an integer count or a list
             self._proxy_count = proxies if isinstance(proxies, int) else len(proxies)
-            
+
             # 3. Distinguish 0 valid proxies vs N valid proxies
             if self._proxy_count == 0:
                 self._proxy_status = "empty_file"
