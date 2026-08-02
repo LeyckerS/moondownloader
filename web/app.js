@@ -1132,7 +1132,7 @@ async function boot() {
 class MockApi {
   constructor() {
     this.names = Array.from({ length: 30 }, (_, i) =>
-      `CoD_-_Black_Ops_3_--_fitgirl-repacks.site_--_.part${String(i + 1).padStart(2, "0")}.rar`);
+      `sample-archive.part${String(i + 1).padStart(2, "0")}.rar`);
     this.total = 85;
     this.done = 2; this.ok = 2; this.fail = 1; this.kills = 1;
     this.extracted = 6;
@@ -1142,10 +1142,10 @@ class MockApi {
       ["   fuckingfast: direct HTTP   ·   datanodes: 8 pages, captcha 30s", "dim"],
       ["   chrome: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "dim"],
       ["   proxies: 12 loaded — rotating per download", "info"],
-      ["  → CoD_-_Black_Ops_3_--_.part01.rar", "dim"],
-      ["    ✓  Saved: CoD_-_Black_Ops_3_--_.part01.rar  (12.4 MB/s)", "ok"],
-      ["    ⚡  Kill #1: part07.rar  (612MB) → re-extract", "kill"],
-      ["    ✗  part06.rar: HTTP 403", "fail"],
+      ["  → sample-archive.part01.rar", "dim"],
+      ["    ✓  Saved: sample-archive.part01.rar  (12.4 MB/s)", "ok"],
+      ["    ⚡  Kill #1: sample-archive.part07.rar  (612MB) → re-extract", "kill"],
+      ["    ✗  sample-archive.part06.rar: HTTP 403", "fail"],
     ];
     this.live = [
       { key: "https://datanodes.to/x1/part01.rar", i: 0, state: "ok", pct: 1, mbs: 12.4 },
@@ -1186,11 +1186,11 @@ class MockApi {
 
   async hello() {
     return { version: "v3.0 · preview", have_curl: true, settings: {
-      out_folder: "E:\\blackops3", mode: "download", workers: 16, dl_streams: 8, retries: 3,
+      out_folder: "D:\\downloads", mode: "download", workers: 16, dl_streams: 8, retries: 3,
       dn_pages: 8, dn_captcha: 30,
       dn_chrome: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
       dn_apikey: "", links_text: Array.from({ length: 12 }, (_, n) =>
-        `https://${n % 3 ? "datanodes.to" : "fuckingfast.co"}/x${n + 1}/${this.names[n]}`).join("\n"),
+        `https://${n % 3 ? "datanodes.to" : "fuckingfast.co"}/${(n + 1).toString(36).padStart(6, "0")}`).join("\n"),
     } };
   }
 

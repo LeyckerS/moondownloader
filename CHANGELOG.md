@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The preview mock no longer ships identifiable sample content.** Its filenames named a
+  specific title and a repack site, its link list carried them in readable URLs, and its
+  destination path was a real one — and every screenshot in the README is rendered from
+  that mock, so all of it was on display on the project front page. The sample data is now
+  neutral (`sample-archive.partNN.rar`, opaque link ids, `D:\downloads`) and the
+  screenshots have been regenerated from it.
+- The mock reported `v2.0 - preview`, so the screenshots taken for the V3 release announced
+  the previous version.
+
 ## [3.0] — 2026-08-02
 
 ### Added
