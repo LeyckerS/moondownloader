@@ -24,6 +24,7 @@ first contribution:
 | [@Vam-si-krish](https://github.com/Vam-si-krish) | made an unsupported host fail on sight instead of being retried like a network error, and collapsed the host names to one definition shared by both front-ends (#108) |
 | [@felix-windsor](https://github.com/felix-windsor) | stopped two links with the same filename from sharing one `.tmp` and corrupting each other, by reserving destination names at registration (#119) |
 | [@AashishGupta2007](https://github.com/AashishGupta2007) | narrowed and documented the eight exception handlers in the Chrome-lifecycle slice of `moon_extract.py` (#118) |
+| [@Guflly](https://github.com/Guflly) | made `Engine.stop()` actually close Chrome before returning, so shutting down mid-run no longer leaves an orphaned browser holding its profile lock (#122) |
 
 Dependabot handles the dependency and action bumps.
 

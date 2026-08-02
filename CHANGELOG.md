@@ -63,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole version. It now tracks the tag again, at `v3.0`.
 
 ### Fixed
+- **Closing the app mid-run left Chrome alive.** Teardown only happened when a run ended
+  normally: `Engine.stop()` set a flag and returned, the worker ran on a daemon thread, and
+  the interpreter tore it down before `BrowserGate.aclose()` could execute — so the browser
+  survived, still holding its profile lock. `stop()` now closes the gate from the caller's
+  thread and waits briefly for the worker, and the gate refuses to reopen once closed, so a
+  late worker cannot launch a second Chrome on the way out (#122, @Guflly)
 - **The preview mock no longer ships identifiable sample content.** Its filenames named a
   specific title and a repack site, its link list carried them in readable URLs, and its
   destination path was a real one — and every screenshot in the README is rendered from
