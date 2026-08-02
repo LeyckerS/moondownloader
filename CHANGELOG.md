@@ -13,16 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **The preview mock no longer ships identifiable sample content.** Its filenames named a
-  specific title and a repack site, its link list carried them in readable URLs, and its
-  destination path was a real one — and every screenshot in the README is rendered from
-  that mock, so all of it was on display on the project front page. The sample data is now
-  neutral (`sample-archive.partNN.rar`, opaque link ids, `D:\downloads`) and the
-  screenshots have been regenerated from it.
-- The mock reported `v2.0 - preview`, so the screenshots taken for the V3 release announced
-  the previous version.
-
 ## [3.0] — 2026-08-02
 
 ### Added
@@ -71,6 +61,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a motion preference is the obvious thing to add if anyone asks for one.
 - `VERSION` was still `v2.0` after the 2.1 release, so the app under-reported itself for a
   whole version. It now tracks the tag again, at `v3.0`.
+
+### Fixed
+- **The preview mock no longer ships identifiable sample content.** Its filenames named a
+  specific title and a repack site, its link list carried them in readable URLs, and its
+  destination path was a real one — and every screenshot in the README is rendered from
+  that mock, so all of it was on display on the project front page. The sample data is now
+  neutral (`sample-archive.partNN.rar`, opaque link ids, `D:\downloads`) and the
+  screenshots have been regenerated from it.
+- The mock reported `v2.0 - preview`, so the screenshots taken for the V3 release announced
+  the previous version.
 
 ## [2.1] — 2026-08-01
 
