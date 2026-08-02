@@ -1110,7 +1110,7 @@ async function boot() {
   try {
     const info = await bridge.api.hello();
     if (info) {
-      $("#version").textContent = info.version || "v2.0";
+      $("#version").textContent = info.version || "v3.0";
       if (info.have_curl === false) {
         const line = $("#curlLine");
         line.dataset.i18n = "ff_missing";
@@ -1138,7 +1138,7 @@ class MockApi {
     this.extracted = 6;
     this.bytes = 2.6 * 2 ** 30;
     this.log = [
-      ["▶  85 links  ·  16 extractors  ·  8 streams  ·  3 retries  ·  v2.0", "info"],
+      ["▶  85 links  ·  16 extractors  ·  8 streams  ·  3 retries  ·  v3.0", "info"],
       ["   fuckingfast: direct HTTP   ·   datanodes: 8 pages, captcha 30s", "dim"],
       ["   chrome: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "dim"],
       ["   proxies: 12 loaded — rotating per download", "info"],
@@ -1185,7 +1185,7 @@ class MockApi {
   }
 
   async hello() {
-    return { version: "v2.0 · preview", have_curl: true, settings: {
+    return { version: "v3.0 · preview", have_curl: true, settings: {
       out_folder: "E:\\blackops3", mode: "download", workers: 16, dl_streams: 8, retries: 3,
       dn_pages: 8, dn_captcha: 30,
       dn_chrome: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",

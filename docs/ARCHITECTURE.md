@@ -183,14 +183,19 @@ top right says what is in use: `auto` / `chrome` / `api key`.
 **FUCKINGFAST.CO** — no knobs, and it says so: pure HTTP, opens no browser, has no
 captcha. It only reports whether `curl_cffi` is present.
 
-**The four cards** — `SPEED` (3 s rolling window + an SVG sparkline with a glow),
-`COMPLETED`, `DOWNLOADED` (`ok / ko / kill`), `ETA` (estimated on bytes, not on files).
+**The hero band** — `SPEED` (3 s rolling window) is the figure being watched, so it is set
+at 49px with the sparkline spanning the card underneath; `COMPLETED`, `DOWNLOADED`
+(`ok / ko / kill`) and `ETA` (estimated on bytes, not on files) are reference and sit small
+to its right. Four equal cards gave four equal weights to numbers that are not equal.
 `PIPELINE` keeps extraction and download separate, because they run at the same time.
 
 **ACTIVE FILES** — one row per file: SVG progress ring, state
 (`queue / extracting / downloading / saved / failed / restart`), percentage, instantaneous
-speed, and a bar along the foot. `content-visibility: auto`, so a 400-row list costs
-nothing while it is off screen.
+speed, the provider it came from (read off the source URL, which is the row key), and a bar
+along the foot. Row weight follows state: what is moving gets room and a brighter name,
+what has finished tightens and recedes. `content-visibility: auto`, so a 400-row list costs
+nothing while it is off screen. Above the list, a filter box and state chips hide rows
+without touching any count the engine owns.
 
 **LOG** — the same lines as always, same tags and colours, capped at 2000.
 

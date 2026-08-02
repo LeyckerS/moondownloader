@@ -2,7 +2,7 @@
 
 # 🌙 Moon Downloader
 
-### **V2**
+### **V3**
 
 **Bulk file downloader** — real-Chrome extraction for datanodes.to, pure-HTTP extraction for fuckingfast.co, aiohttp streaming, and a GUI that runs on Edge WebView2.
 
@@ -36,8 +36,17 @@ Built with Python · Playwright · aiohttp · curl_cffi
 
 <img src="docs/gui_speed.png" width="920"/>
 
-<sub>**195.7 MB/s** · 124 fuckingfast links · 8 DL streams · 12.63 GB in 1m23s · ETA 3m35s —
-and **not one browser window**, because no datanodes link was in the batch.</sub>
+<sub>The rate is the figure being watched, so it gets the left side and the plot underneath;
+completed, downloaded and ETA are reference and sit small. Every row shows which host it came
+from. <b>Rendered from the page's own mock engine</b> — the numbers are synthetic, which is what
+the <code>demo</code> chip in the corner says.</sub>
+
+<br><br>
+
+<img src="docs/gui_boot.png" width="640"/>
+
+<sub>The cold open: the mark draws itself on, the wordmark resolves out of a blur, and the card
+cascade is held until it hands over. Under two seconds, and any key or click ends it.</sub>
 
 <br><br>
 
@@ -51,6 +60,9 @@ and **not one browser window**, because no datanodes link was in the batch.</sub
 <td><img src="docs/gui_log.png" width="450"/></td>
 </tr>
 </table>
+
+<sub>Filter box and state chips over the list; what is moving gets room and a brighter name, what
+has finished tightens and recedes.</sub>
 
 </div>
 
@@ -83,7 +95,34 @@ files done, 0 failed, no browser window opened. Method and instrumentation in
 
 ---
 
-## ⚡ What V2 is
+## 🌗 What V3 is
+
+**The interface, rebuilt.** The engine is untouched — extraction, downloading and the CLI are the
+same code they were in 2.1, and that is deliberate: this release changes what you look at, not what
+it does.
+
+| | before | V3 |
+|:--|:--|:--|
+| **Launch** | the window simply appeared | a cold open under two seconds, skippable, removed from the DOM when done |
+| **Mark** | a 512px PNG | an SVG whose crescent and orbit move independently |
+| **Headline** | four equal stat cards | one hero band; the rate is a 49px figure, the rest is reference |
+| **Settings column** | five floating cards | one surface, hairline sections, Start built in |
+| **Transfer rows** | all identical weight | provider chip per row, weight follows state |
+| **Finding a file** | scrolling | filter box, state chips, `/` to focus |
+| **Getting links in** | the Load button | drag and drop anywhere, appended not replacing |
+| **After a run** | the list, as it was | a summary that can copy every failed link |
+
+Keyboard: `Ctrl+Enter` start or stop · `Ctrl+O` load a `.txt` · `/` filter · `?` the shortcut panel ·
+`Esc` close or clear.
+
+**On motion.** The GUI animates for everyone; there is no `prefers-reduced-motion` exception, and
+that is a stated choice rather than an oversight. Nothing flashes and every loop is slow. If you
+want a motion preference, [open an issue](https://github.com/LeyckerS/moondownloader/issues/new) —
+it is a small change.
+
+---
+
+## ⚡ How the two providers differ
 
 The two providers stopped having anything in common, so the app stopped pretending they did.
 
@@ -97,8 +136,7 @@ The two providers stopped having anything in common, so the app stopped pretendi
 
 A batch of fuckingfast links **never launches Chrome** — not even the Playwright driver's node process.
 A batch that contains one datanodes link opens exactly one shared Chrome, on demand, no matter how many
-extractors are running. The screenshot above is that fix, visible: 124 fuckingfast links moving at
-195.7 MB/s with no browser window anywhere.
+extractors are running.
 
 One `BrowserGate` in `moon_extract.py` owns that decision, so the GUI and the CLI behave the same
 way — `tests/test_no_chrome.py` asserts it for both.
@@ -226,7 +264,7 @@ Full write-up: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [CLI](docs/CLI.md) | every flag, exit codes, scripting examples |
 | [Configuration](docs/CONFIGURATION.md) | every setting, every environment variable, the Chrome profile |
 | [Providers](docs/PROVIDERS.md) | how each host is extracted, and how to add another |
-| [Architecture](docs/ARCHITECTURE.md) | how V2 is built, feature by feature |
+| [Architecture](docs/ARCHITECTURE.md) | how the engine is built, feature by feature |
 | [Engineering notes](docs/ENGINEERING_NOTES.md) | the measurements behind the design decisions |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 403s, Turnstile failures, CDP conflicts, stalls |
 | [FAQ](docs/FAQ.md) | why curl_cffi is mandatory, what `--browsers` means |
