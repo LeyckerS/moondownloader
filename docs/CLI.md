@@ -20,7 +20,7 @@ are ignored.
 | `--browsers` | integer | `8` | Number of parallel extraction workers. Despite the name, it does not start that many browsers: datanodes uses one shared Chrome instance. |
 | `--streams` | integer | `24` | Maximum number of concurrent download streams. |
 | `--retries` | integer | `3` | Maximum extraction attempts per URL. Network retries inside one download are separate. |
-| `--proxies` | path | `proxies.txt` | Proxy-list file to load. A missing file, or one that yields no usable proxies, prints a warning — except the implicit default (`proxies.txt` when `--proxies` is omitted), whose absence stays silent as the normal no-proxy state. |
+| `--proxies` | path | `proxies.txt` | Proxy-list file to load. Applies to **downloads only** — extraction always goes direct, see below. A missing file, or one that yields no usable proxies, prints a warning — except the implicit default (`proxies.txt` when `--proxies` is omitted), whose absence stays silent as the normal no-proxy state. |
 | `--version` | flag | — | Print the version and exit. Works even without `--urls`/`--output`. |
 
 `--urls` and `--output` are required. The parser accepts integer values for
@@ -36,6 +36,16 @@ missing or empty":
 - a file that exists but yields no usable proxies: `WARNING: proxy file {path} yielded 0 proxies`
 - the implicit default path missing: no warning
 - whenever any proxies load or lines get skipped: `[proxies] {n} loaded, {s} skipped`
+
+`--proxies` covers the download half of a run and no more. The pool is read once, in
+`download_file`, to build the download session; the extraction layer never receives one,
+so the datanodes browser and the fuckingfast `curl_cffi` session both connect from your
+own address on every run. `[proxies] 20 loaded` means the bytes are covered — it does not
+mean the page loads were.
+
+If a run shows pages opening while every download fails, check the proxies before
+suspecting the extractor: that split is exactly what an unusable proxy list looks like
+here.
 
 ## Examples
 

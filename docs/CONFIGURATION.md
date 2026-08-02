@@ -133,8 +133,24 @@ Place them next to the scripts:
 
 | File | Purpose |
 |:--|:--|
-| `proxies.txt` | proxy list — `ip:port:user:pass` or `http://user:pass@ip:port` |
+| `proxies.txt` | proxy list — `ip:port:user:pass` or `http://user:pass@ip:port`. **downloads only**, see below |
 | `settings.json` | written by the GUI: settings, pasted links, language |
+
+### What proxies cover
+
+The pool is consulted in exactly one place — `download_file` in `moon_download.py`, where
+`_PROXY_POOL.next()` picks the entry the download session is built from. Nothing in
+`moon_extract.py` takes a proxy: the Chrome instance datanodes needs for its Turnstile
+challenge is launched with no `--proxy-server`, and the `curl_cffi` session fuckingfast
+uses is constructed without one. Both connect directly.
+
+So a run with `proxies.txt` loaded has the file host seeing your own address for every
+page load and your proxy's for the bytes. Rotation is bandwidth cover, not identity
+cover — if you need the extraction half proxied too, that is not something this file can
+do for you today.
+
+The practical symptom: put unreachable proxies in the list and pages still open, while
+downloads fail. That is the design working, not the proxy system failing.
 
 ## Output files
 

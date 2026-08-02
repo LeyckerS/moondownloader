@@ -319,7 +319,13 @@ Place next to the scripts:
 
 | File | Purpose |
 |:--|:--|
-| `proxies.txt` | Proxy list — `ip:port:user:pass` or `http://user:pass@ip:port` |
+| `proxies.txt` | Proxy list — `ip:port:user:pass` or `http://user:pass@ip:port`. **Downloads only** — see below |
+
+Proxies wrap the **download** session and nothing else. Link extraction always connects
+directly, from your own address: the shared Chrome instance datanodes needs for its
+Turnstile challenge, and the `curl_cffi` session fuckingfast uses, are never routed
+through the pool. An unreachable proxy list therefore stalls downloads while pages keep
+opening normally — that is the design, not a broken proxy.
 
 ---
 

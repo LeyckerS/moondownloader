@@ -67,6 +67,17 @@ http://user:pass@ip:port
 
 The status bar shows how many were loaded.
 
+## Do proxies hide me from the file host?
+
+Only for the download. The pool wraps the download session and nothing else, so link
+extraction — the datanodes Chrome window that answers the Turnstile challenge, and the
+fuckingfast `curl_cffi` session — connects directly from your own address every time.
+
+That is deliberate: pushing a real Chrome through a rotating pool makes the challenge
+harder to pass, not easier, and the bandwidth that proxies are actually there for is all
+in the download. But it means `PROXY 20` in the footer covers half the run, and the half
+it does not cover is the half that identifies you to the host.
+
 ## Can I skip the captcha entirely?
 
 With a datanodes **premium API key**, yes — extraction becomes one JSON GET, no browser,
