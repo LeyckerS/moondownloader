@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.0] — 2026-08-02
 
 ### Added
+- CI now runs on Python **3.13 and 3.14** as well as 3.10-3.12. The project advertises 3.10+
+  and two of the versions covered by that promise had never been exercised — including the
+  one development happens on. All five pass (#129, @Vam-si-krish)
 - **A cold open.** The mark draws itself on as a vector, the wordmark resolves out of a
   blur, a raking beam crosses the field, and the card cascade is *held* — not merely
   delayed — until it hands over. Under two seconds, ended instantly by any key or click,
@@ -63,6 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole version. It now tracks the tag again, at `v3.0`.
 
 ### Fixed
+- **Nothing said that proxies cover downloads only.** `_PROXY_POOL.next()` is consulted in one
+  place — `download_file` — so the download session is proxied and nothing else is: the
+  datanodes Chrome that answers the Turnstile challenge and the fuckingfast `curl_cffi`
+  session both connect directly, from the user's own address, on every run. `README.md`,
+  `docs/CLI.md`, `docs/CONFIGURATION.md` and `docs/FAQ.md` now state the scope, and name the
+  symptom it produces: pages opening normally while every download fails is an unusable proxy
+  list, not a broken extractor (#128, @basisworks)
 - **Closing the app mid-run left Chrome alive.** Teardown only happened when a run ended
   normally: `Engine.stop()` set a flag and returned, the worker ran on a daemon thread, and
   the interpreter tore it down before `BrowserGate.aclose()` could execute — so the browser
