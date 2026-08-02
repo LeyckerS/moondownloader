@@ -5,13 +5,15 @@ All notable changes to Moon Downloader will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Versioning.** The public releases are **V1** (tag `v14.1`) and **V2** (tag `v2.0`).
-> V2 is where the numbering resets: the 14.x and 15.0 entries below keep the numbers they
-> shipped with, and `v14.1` keeps its tag so its download link never breaks.
+> **Versioning.** The public releases are **V1** (tag `v14.1`), **V2** (tag `v2.0`) and
+> **V3** (tag `v3.0`). V2 is where the numbering reset: the 14.x and 15.0 entries below keep
+> the numbers they shipped with, and `v14.1` keeps its tag so its download link never
+> breaks. V3 is a major because the interface was rebuilt, not because the engine changed —
+> extraction, downloading and the CLI are the same code they were in 2.1.
 
 ## [Unreleased]
 
-## [2.2] — 2026-08-02
+## [3.0] — 2026-08-02
 
 ### Added
 - **A cold open.** The mark draws itself on as a vector, the wordmark resolves out of a
@@ -58,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   flashes and every loop is slow, but this is a stated choice rather than an oversight,
   and a motion preference is the obvious thing to add if anyone asks for one.
 - `VERSION` was still `v2.0` after the 2.1 release, so the app under-reported itself for a
-  whole version. It now tracks the tag.
+  whole version. It now tracks the tag again, at `v3.0`.
 
 ## [2.1] — 2026-08-01
 
