@@ -13,12 +13,12 @@
   font-size: clamp(13px, 0.42vw + 10.6px, 19px);
 
   --ink:        #05070c;
-  --panel:      rgba(16, 22, 34, 0.72);
+  --panel:      rgba(9, 13, 21, 0.95);
   --panel-solid:#0b1018;
-  --panel-hi:   rgba(9, 13, 21, 0.86);
-  --line:       rgba(120, 150, 200, 0.13);
-  --line-hi:    rgba(140, 180, 235, 0.28);
-  --glass:      rgba(255, 255, 255, 0.055);
+  --panel-hi:   rgba(6, 9, 15, 0.97);
+  --line:       rgba(150, 180, 225, 0.32);
+  --line-hi:    rgba(185, 212, 250, 0.55);
+  --glass:      rgba(255, 255, 255, 0.02);
 
   --teal:   #4fe3d0;
   --violet: #8b7cf0;
@@ -27,9 +27,9 @@
   --amber:  #f0b64f;
   --red:    #ff5c72;
 
-  --txt:  #dfe8f6;
-  --txt2: #8496b1;
-  --txt3: #55677f;
+  --txt:  #ffffff;
+  --txt2: #c8d6ea;
+  --txt3: #97a9c1;
 
   --r-card: 16px;
   --r-in:   11px;
@@ -61,16 +61,25 @@ body {
 
 .ambience {
   background: url("assets/window.png") center / cover no-repeat, var(--ink);
-  opacity: 0.9;
+  opacity: 0.24;
 }
 
 /* Second layer: a pair of soft radial blooms that pick up the brand colours.
    Cheap, resolution-independent, and it gives the glass something to blur. */
-.ambience-glow {
+.ambience-glow { overflow: hidden; }
+
+/* The blooms live on a child so they can drift without the fixed layer's own
+   box ever moving: transforming the layer itself pushes its rect past the
+   viewport, which render_gui.py correctly reports as an overflow. */
+.ambience-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background:
-    radial-gradient(120% 90% at 100% 0%,  rgba(79, 227, 208, 0.10), transparent 60%),
-    radial-gradient(90%  70% at 86%  6%,  rgba(139, 124, 240, 0.09), transparent 62%),
+    radial-gradient(120% 90% at 100% 0%,  rgba(79, 227, 208, 0.13), transparent 60%),
+    radial-gradient(90%  70% at 86%  6%,  rgba(139, 124, 240, 0.12), transparent 62%),
     radial-gradient(140% 120% at 0% 100%, rgba(4, 6, 12, 0.9), transparent 70%);
+  animation: drift 44s ease-in-out infinite;
 }
 
 /* ── shell ────────────────────────────────────────────────────────────── */
@@ -99,9 +108,33 @@ body {
 
 .brand { display: flex; align-items: center; gap: 0.95rem; }
 
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* ── the mark ────────────────────────────────────────────────────────── */
+/* Vector rather than the PNG. The crescent and the orbit are separate shapes,
+   so the ring can move on its own -- and it stays sharp at the 15rem the cold
+   open draws it at, which a 512px raster does not. */
+.mark-svg { display: block; overflow: visible; }
+.mark-svg .mk-crescent { fill: url(#moonGrad); }
+.mark-svg .mk-orbit {
+  fill: none;
+  stroke: url(#orbitGrad);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
 .mark {
-  width: 3.1rem; height: 3.1rem;
+  width: 4.2rem; height: 4.2rem;
   filter: drop-shadow(0 0 14px rgba(79, 227, 208, 0.45)) drop-shadow(0 0 34px rgba(139, 124, 240, 0.22));
+}
+
+/* The ring is a circle seen at an angle, so animating its minor radius reads as
+   one rotation in depth. Cheaper and steadier than a 3D transform, and it never
+   pushes the glyph off its own baseline. */
+.mark .mk-orbit { animation: orbit 9s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes orbit {
+  0%, 100% { ry: 24px; transform: rotate(-24deg); }
+  50%      { ry: 5px;  transform: rotate(-15deg); }
 }
 
 .wordmark {
@@ -110,7 +143,26 @@ body {
   line-height: 1.05;
 }
 .wordmark span  { color: var(--txt2); font-weight: 300; }
-.wordmark strong{ color: #fff; font-weight: 650; margin-left: 0.32em; }
+.wordmark strong {
+  font-weight: 650;
+  margin-left: 0.32em;
+  /* A highlight that travels across the glyphs every few seconds. Clipping the
+     gradient to the text is what keeps it on the letters instead of on a box
+     behind them; the long flat head of the keyframe is the pause between
+     passes, so it reads as a sheen and not as a blinking sign. */
+  color: transparent;
+  background: linear-gradient(100deg,
+              #ffffff 42%, rgba(255, 255, 255, 0.55) 47%,
+              #eaf4ff 50%, rgba(255, 255, 255, 0.55) 53%, #ffffff 58%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: sheen 7s ease-in-out infinite;
+}
+@keyframes sheen {
+  0%, 62% { background-position: 135% 0; }
+  100%    { background-position: -35% 0; }
+}
 
 .hosts {
   margin-top: 0.28rem;
@@ -167,8 +219,24 @@ body {
   min-height: 0;
 }
 
-.side { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 0.8rem; min-height: 0; }
-.side-scroll { overflow-y: auto; padding-right: 0.35rem; display: grid; gap: var(--gap); align-content: start; }
+.side { display: grid; min-height: 0; }
+
+/* One surface for the whole column. Five separate floating cards gave five
+   separate frames, five shadows and five borders to a group of controls that is
+   really one thing: the setup for a run. Sections are separated by a hairline
+   and by space, which is enough. */
+.side-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.side-scroll { overflow-y: auto; display: block; min-height: 0; }
+
+.sect { padding: 0.95rem 1.15rem; border-bottom: 1px solid var(--line); }
+.sect-last { border-bottom: 0; }
+.sect > .card-head { margin-bottom: 0.75rem; }
 .main { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--gap); min-height: 0; }
 
 /* ── card ─────────────────────────────────────────────────────────────── */
@@ -239,7 +307,7 @@ body {
 /* ── link editor ──────────────────────────────────────────────────────── */
 .editor {
   position: relative;
-  height: 11.5rem;
+  height: 11rem;
   border-radius: var(--r-in);
   background: var(--panel-hi);
   border: 1px solid var(--line);
@@ -480,38 +548,109 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
 .lg.ot { color: var(--txt3); }
 .lg.off { color: var(--txt3); opacity: 0.65; }
 
-/* ── stats ────────────────────────────────────────────────────────────── */
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); }
-.card.stat { padding: 0.85rem 1rem 0.95rem; }
-
-.stat-value { display: flex; align-items: baseline; gap: 0.4rem; }
-.stat-value b {
-  font-family: var(--mono);
-  font-size: 1.85rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+/* ── hero band ────────────────────────────────────────────── */
+/* Four equal boxes gave four equal weights to numbers that are not equal. The
+   rate is the one being watched, so it gets the whole left side and the plot
+   underneath; completed, downloaded and ETA are reference and sit small. */
+.card.hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 0.9rem 2rem;
+  align-items: end;
+  padding: 1.05rem 1.3rem 0.9rem;
 }
-.stat-value span { font-family: var(--mono); font-size: 0.66rem; color: var(--txt3); }
-.card.stat[data-accent="teal"]   .stat-value b { color: var(--teal); }
-.card.stat[data-accent="mint"]   .stat-value b { color: var(--mint); }
-.card.stat[data-accent="violet"] .stat-value b { color: var(--violet); }
-.card.stat[data-accent="plain"]  .stat-value b { color: var(--txt); }
 
-.sub { margin-top: 0.7rem; font-family: var(--mono); font-size: 0.6rem; color: var(--txt3); }
+.hero-lead { grid-column: 1; grid-row: 1; display: grid; gap: 0.5rem; }
+.hero-label {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.26em; text-transform: uppercase; color: var(--txt2);
+}
+.hero-value { display: flex; align-items: baseline; gap: 0.55rem; }
+.hero-value b {
+  font-family: var(--mono);
+  /* The hero figure. Big enough to read from across the room, which is the
+     posture this app is actually used in. */
+  font-size: clamp(2.9rem, 3.4vw, 4.3rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.9;
+  color: var(--teal);
+  /* tabular-nums against the usual advice for a display figure: this one is
+     re-rendered ~12x a second, and proportional digits make it jitter. */
+  font-variant-numeric: tabular-nums;
+}
+.hero-value span { font-family: var(--mono); font-size: 0.78rem; color: var(--txt3); }
 
-.spark { display: block; width: 100%; height: 2rem; margin-top: 0.5rem; overflow: visible; }
+.hero-stats {
+  grid-column: 2; grid-row: 1;
+  display: flex; justify-content: flex-end; align-items: flex-end;
+  gap: clamp(1.1rem, 2.4vw, 2.6rem);
+  min-width: 0;
+}
+.hstat { display: grid; gap: 0.3rem; min-width: 0; }
+.hstat-label {
+  font-family: var(--mono); font-size: 0.55rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--txt3);
+  white-space: nowrap;
+}
+.hstat-value { display: flex; align-items: baseline; gap: 0.3rem; }
+.hstat-value b {
+  font-family: var(--mono); font-size: 1.3rem; font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: color .3s, text-shadow .3s;
+}
+.hstat-value span { font-family: var(--mono); font-size: 0.62rem; color: var(--txt3); }
+.hstat[data-accent="mint"]   .hstat-value b { color: var(--mint); }
+.hstat[data-accent="violet"] .hstat-value b { color: var(--violet); }
+.hstat[data-accent="plain"]  .hstat-value b { color: var(--txt); }
+.hstat.hot[data-accent="mint"] .hstat-value b { text-shadow: 0 0 16px rgba(53, 214, 164, 0.5); }
+.hstat-sub { font-family: var(--mono); font-size: 0.58rem; color: var(--txt3); white-space: nowrap; }
+.hstat .track.mini { width: 7rem; max-width: 100%; }
+
+.spark-wrap { position: relative; grid-column: 1 / -1; grid-row: 2; }
+.spark { display: block; width: 100%; height: 3.3rem; overflow: visible; }
 .spark polyline {
   fill: none;
   stroke: url(#sparkStroke);
-  stroke-width: 1.6;
+  stroke-width: 2;
   stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 0 4px rgba(79, 227, 208, 0.75));
 }
 .spark polygon { stroke: none; }
-.spark circle { fill: #fff; stroke: none; filter: drop-shadow(0 0 5px var(--teal)); }
+
+/* The window mean. A sparkline scaled to its own peak puts that peak at the
+   same height whatever the rate is, so the shape alone cannot say whether a run
+   is steady or spiky. This hairline is the only reference in the box -- it is
+   recessive on purpose and carries no label. */
+.spark-mean {
+  visibility: hidden;
+  stroke: rgba(140, 175, 225, 0.3);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: y1 .4s linear, y2 .4s linear;
+}
+
+.spark-head {
+  position: absolute;
+  left: var(--hx, 0%);
+  top: var(--hy, 100%);
+  width: 8px; height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: #fff;
+  /* 2px ring in the surface colour so the dot stays legible where it sits on
+     top of its own line, then the glow outside it. */
+  box-shadow: 0 0 0 2px var(--panel-solid), 0 0 8px 1px var(--teal);
+  opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+}
+.card.hero.hot .spark-head { opacity: 1; }
 
 /* ── pipeline ─────────────────────────────────────────────────────────── */
 .pipeline .card-head { flex-wrap: wrap; }
@@ -660,12 +799,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
 /* [hidden] is a UA rule; `.empty { display: grid }` outranks it, so the empty
    state has to hide itself explicitly or it floats over the file list. */
 .empty[hidden] { display: none; }
-.empty img {
-  width: 5.4rem; height: 5.4rem;
-  opacity: 0.5;
+.empty .mark-svg {
+  width: 8rem; height: 8rem;
+  opacity: 0.55;
   filter: drop-shadow(0 0 24px rgba(79, 227, 208, 0.35));
   animation: float 7s ease-in-out infinite;
 }
+.empty .mark-svg .mk-orbit { animation: orbit 9s ease-in-out infinite; transform-origin: 50% 50%; }
 .empty p { font-family: var(--mono); font-size: 0.72rem; color: var(--txt2); margin-top: 0.5rem; }
 .empty small { font-family: var(--mono); font-size: 0.6rem; color: var(--txt3); }
 @keyframes float {
@@ -771,13 +911,20 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
   .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow-y: auto; }
   .side { grid-template-rows: auto auto; }
   .side-scroll { overflow: visible; }
-  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card.hero { grid-template-columns: minmax(0, 1fr); }
+  .hero-stats { grid-column: 1; grid-row: 2; justify-content: flex-start; }
+  .spark-wrap { grid-row: 3; }
   .card.feed { min-height: 26rem; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .001s !important; transition-duration: .001s !important; }
-}
+/* There is no reduced-motion block here, and that is a decision rather than an
+   oversight. Windows reports "reduce" whenever its own animation setting is off,
+   which on this machine it is -- set that way for performance, not for comfort.
+   Every version of honouring it deleted the thing the app is for: first the whole
+   design, then the cold open, then the logo orbit and the wordmark sheen. The
+   person running this asked for the motion explicitly, and an explicit request
+   outranks an inferred default. Nothing flashes and every loop is slow, which is
+   the part of that guidance that actually matters. */
 
 /* ════════════════════════════════════════════════════════════════════════
    Motion & reactivity
@@ -902,19 +1049,586 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .frow[data-state="ok"]:hover, .frow[data-state="fail"]:hover { opacity: 1; }
 
 /* ── stat numbers ────────────────────────────────────────────────────── */
-.stat-value b { transition: color .3s; will-change: contents; }
-.card.stat[data-accent="teal"].hot  .stat-value b { text-shadow: 0 0 18px rgba(79, 227, 208, 0.55); }
-.card.stat[data-accent="mint"].hot  .stat-value b { text-shadow: 0 0 18px rgba(53, 214, 164, 0.5); }
+.hero-value b { transition: color .3s, text-shadow .3s; will-change: contents; }
+.card.hero.hot .hero-value b { text-shadow: 0 0 26px rgba(79, 227, 208, 0.5); }
 
 /* ── tab cross-fade ──────────────────────────────────────────────────── */
 @keyframes tab-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .files:not([hidden]), .log:not([hidden]) { animation: tab-in .22s ease-out both; }
 
 /* ── empty state ─────────────────────────────────────────────────────── */
-.empty img { animation: float 7s ease-in-out infinite, reveal-up .5s both; }
+.empty .mark-svg { animation: float 7s ease-in-out infinite, reveal-up .5s both; }
 
 /* ── toast exit ──────────────────────────────────────────────────────── */
 .toast.out { animation: toast-out .25s ease-in forwards; }
 @keyframes toast-out { to { opacity: 0; transform: translateX(14px); } }
 
 /* ── first-paint skeleton on the stat numbers ────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════════
+   Registered custom properties
+   A custom property is an unparsed token until it is registered, so a gradient
+   angle cannot be transitioned or tweened: the engine has no type to
+   interpolate. @property gives it one. That is the whole trick behind every
+   moving gradient below -- without the registration these animations do not
+   degrade, they simply never run.
+   ════════════════════════════════════════════════════════════════════════ */
+
+@property --spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes sweep { to { --spin: 1turn; } }
+
+/* ── conic trace on transfers in flight ──────────────────────────────── */
+/* Painted into a 1px border box through a mask: no extra element, nothing
+   covering the filename, and it stops existing the moment the row stops
+   moving. Only `download` rows get it -- extraction already has the spinning
+   ring, and 16 extractor rows tracing at once is a lot of compositing for a
+   fact the ring already tells you. */
+.frow[data-state="download"]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: 14px;
+  background: conic-gradient(from var(--spin),
+              transparent 0deg,
+              color-mix(in srgb, var(--c) 92%, #fff) 38deg,
+              transparent 108deg,
+              transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: sweep 3.2s linear infinite;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ── running halo on the primary button ──────────────────────────────── */
+/* The button is the one control that changes meaning mid-run (Start becomes
+   Stop), so the halo is tied to the run being live, not to hover. */
+.primary[data-state="running"]::after,
+.primary[data-state="stopping"]::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  border-radius: 16px;
+  background: conic-gradient(from var(--spin),
+              transparent 0deg,
+              rgba(255, 255, 255, 0.85) 26deg,
+              transparent 96deg,
+              transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: sweep 2.4s linear infinite;
+  pointer-events: none;
+}
+
+/* ── run-reactive ambience ───────────────────────────────────────────── */
+/* --heat is written by app.js from the speed the engine already reports. It is
+   an intensity for the glow and never a second opinion on the number itself.
+   Registering it as <number> is what lets it ease between snapshots instead of
+   stepping twelve times a second, and only `opacity` moves, so a full-screen
+   layer stays on the compositor and never repaints. */
+@property --heat {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.ambience-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 100% 0%,  rgba(79, 227, 208, 0.17), transparent 58%),
+    radial-gradient(90%  70% at 84%  4%,  rgba(139, 124, 240, 0.15), transparent 60%),
+    radial-gradient(80%  60% at 6%   96%, rgba(90, 169, 255, 0.11), transparent 66%);
+  opacity: var(--heat);
+  transition: opacity .9s ease-out;
+}
+
+/* ── scroller edge fade ──────────────────────────────────────────────── */
+/* A plain mask would fade the first row even when the list is scrolled to the
+   top, which reads as a rendering fault rather than as depth. Driving the two
+   fade lengths off scroll(self) fades only the edge that actually has content
+   past it. When the list does not overflow the timeline is inactive, the
+   registered initial values (0px) apply, and there is no mask at all. */
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bot {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@supports (animation-timeline: scroll(self)) {
+  .files, .side-scroll, .log {
+    -webkit-mask-image: linear-gradient(to bottom,
+                        transparent 0, #000 var(--fade-top),
+                        #000 calc(100% - var(--fade-bot)), transparent 100%);
+    mask-image: linear-gradient(to bottom,
+                transparent 0, #000 var(--fade-top),
+                #000 calc(100% - var(--fade-bot)), transparent 100%);
+    animation: fade-edges linear both;
+    animation-timeline: scroll(self);
+  }
+
+  @keyframes fade-edges {
+    0%       { --fade-top: 0rem;   --fade-bot: 1.5rem; }
+    6%, 94%  { --fade-top: 1.5rem; --fade-bot: 1.5rem; }
+    100%     { --fade-top: 1.5rem; --fade-bot: 0rem; }
+  }
+}
+
+/* ── tab switch: view transition ─────────────────────────────────────── */
+/* Only the feed body is named, so the sidebar and the stat cards stay in the
+   root snapshot and do not move. Guarded by @supports and by a JS capability
+   check, because on an engine without the API the panels must still swap. */
+@supports (view-transition-name: none) {
+  .feed-body { view-transition-name: feed-panel; }
+
+  ::view-transition-old(feed-panel) { animation: vt-out .18s ease-in both; }
+  ::view-transition-new(feed-panel) { animation: vt-in .26s cubic-bezier(.22, .9, .3, 1) both; }
+}
+
+@keyframes vt-out { to   { opacity: 0; transform: translateY(-6px) scale(.996); } }
+@keyframes vt-in  { from { opacity: 0; transform: translateY(8px)  scale(.996); } }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Transfer filter, drop target, shortcut panel
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── filter row ──────────────────────────────────────────────────────── */
+.feed-tools { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+
+.filter { position: relative; display: flex; align-items: center; }
+.filter svg {
+  position: absolute; left: 0.55rem;
+  width: 0.72rem; height: 0.72rem;
+  fill: none; stroke: var(--txt3); stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  pointer-events: none;
+}
+.filter input {
+  width: 9.5rem;
+  padding: 0.4rem 0.6rem 0.4rem 1.6rem;
+  border-radius: 9px;
+  background: rgba(3, 5, 9, 0.5);
+  border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 0.64rem;
+  color: var(--txt);
+  transition: border-color .2s, width .22s cubic-bezier(.22, .8, .3, 1);
+}
+.filter input:focus { border-color: var(--line-hi); width: 12rem; outline: none; }
+.filter input::placeholder { color: var(--txt3); }
+
+.fchips { display: flex; gap: 0.2rem; }
+.fchips button {
+  padding: 0.36rem 0.55rem;
+  border-radius: 8px;
+  font-family: var(--mono); font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--txt3);
+  border: 1px solid transparent;
+  transition: color .2s, background .2s, border-color .2s;
+}
+.fchips button:hover { color: var(--txt2); }
+.fchips button.on { color: var(--teal); background: rgba(79, 227, 208, 0.08); border-color: rgba(79, 227, 208, 0.25); }
+
+/* Same trap the empty state and the tab panels already hit: .frow is a grid, and
+   `display: grid` outranks the UA rule for [hidden], so a filtered-out row would
+   stay on screen. */
+.frow[hidden] { display: none; }
+
+/* ── drop target ─────────────────────────────────────────────────────── */
+.dropzone {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid; place-items: center;
+  padding: 2.5rem;
+  background: rgba(3, 5, 9, 0.72);
+  backdrop-filter: blur(6px);
+  animation: tab-in .16s ease-out both;
+}
+.dropzone[hidden] { display: none; }
+.dropzone-inner {
+  display: grid; justify-items: center; gap: 0.4rem;
+  width: 100%; height: 100%;
+  align-content: center;
+  border: 2px dashed rgba(79, 227, 208, 0.5);
+  border-radius: var(--r-card);
+  background: rgba(79, 227, 208, 0.05);
+}
+.dropzone svg {
+  width: 2.6rem; height: 2.6rem;
+  fill: none; stroke: var(--teal); stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 14px rgba(79, 227, 208, 0.5));
+}
+.dropzone p { font-family: var(--mono); font-size: 0.8rem; color: var(--txt); margin-top: 0.5rem; }
+.dropzone small { font-family: var(--mono); font-size: 0.62rem; color: var(--txt3); }
+
+/* ── shortcut panel ──────────────────────────────────────────────────── */
+.modal {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  padding: 2rem;
+  background: rgba(3, 5, 9, 0.6);
+  backdrop-filter: blur(8px);
+  animation: tab-in .18s ease-out both;
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  width: min(26rem, 100%);
+  padding: 1.1rem 1.25rem 1.3rem;
+  border-radius: var(--r-card);
+  background: var(--panel-hi);
+  border: 1px solid var(--line-hi);
+  box-shadow: var(--shadow);
+  animation: reveal-up .28s cubic-bezier(.22, .9, .3, 1) both;
+}
+.keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.55rem 1rem; align-items: center; }
+.keys dt { display: flex; gap: 0.25rem; }
+.keys dd { font-family: var(--mono); font-size: 0.66rem; color: var(--txt2); }
+kbd {
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line-hi);
+  border-bottom-width: 2px;
+  font-family: var(--mono); font-size: 0.62rem; font-weight: 700;
+  color: var(--txt);
+}
+
+/* ── narrow windows ──────────────────────────────────────────────────── */
+/* The tools row is the first thing to run out of room. The filter keeps its
+   place -- on a long batch it is the control that matters -- and the state
+   chips fold away, since the same filtering is one keystroke away. */
+@media (max-width: 1320px) {
+  .fchips { display: none; }
+}
+
+/* ── row action ──────────────────────────────────────────────────────── */
+/* The column is always in the grid, only its contents fade. Revealing it by
+   adding a column on hover would reflow every row under the pointer, in a list
+   that is already moving on its own. */
+.frow { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+
+.frow-copy {
+  display: grid; place-items: center;
+  width: 1.5rem; height: 1.5rem;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  opacity: 0;
+  transition: opacity .18s, border-color .18s, background .18s;
+}
+.frow-copy svg {
+  width: 0.72rem; height: 0.72rem;
+  fill: none; stroke: var(--txt2); stroke-width: 1.4;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.frow:hover .frow-copy { opacity: 1; }
+.frow-copy:hover { background: rgba(255, 255, 255, 0.06); border-color: var(--line-hi); }
+.frow-copy:focus-visible { opacity: 1; }
+.frow-copy.done svg { stroke: var(--mint); }
+
+/* ── run summary ─────────────────────────────────────────────────────── */
+.sum-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.sum-grid div {
+  display: grid; gap: 0.25rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--r-in);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+.sum-grid span {
+  font-family: var(--mono); font-size: 0.56rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--txt3);
+}
+.sum-grid b {
+  font-family: var(--mono); font-size: 1.15rem; font-weight: 700;
+  color: var(--txt); font-variant-numeric: tabular-nums;
+}
+.sum-grid div:nth-child(1) b { color: var(--mint); }
+.sum-grid div:nth-child(2) b { color: var(--red); }
+
+.sum-actions { justify-content: flex-start; }
+.sum-actions button[hidden] { display: none; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Cold open
+   Nothing here runs until app.js adds .play, which it does on the first frame
+   the compositor actually produces. The --app window can be mapped after the
+   document has already finished loading, and an animation that played into a
+   window nobody could see yet is indistinguishable from no animation at all --
+   which is exactly how this first got reported as "it never appears".
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root { --boot-delay: 1250ms; }
+
+/* The card cascade is held, not merely delayed. A delay alone would already
+   have elapsed by the time a late window appears, and the cards would simply
+   be sitting there fully drawn. */
+.reveal {
+  animation-delay: calc(var(--d, 0ms) + var(--boot-delay, 0ms));
+  animation-play-state: paused;
+}
+:root.booted .reveal { animation-play-state: running; }
+
+.boot {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-content: center; justify-items: center;
+  gap: 1.35rem;
+  overflow: hidden;
+  background: var(--ink);
+}
+.boot.out { animation: boot-out .42s cubic-bezier(.4, 0, .6, 1) forwards; }
+@keyframes boot-out { to { opacity: 0; transform: scale(1.06); filter: blur(7px); } }
+
+/* A single raking beam across the whole field. It is what makes the open read
+   as cinematic rather than as a spinner on a black page. */
+.boot::before {
+  content: "";
+  position: absolute; inset: -20%;
+  background: linear-gradient(105deg,
+              transparent 34%,
+              rgba(255, 255, 255, 0.05) 47%,
+              rgba(79, 227, 208, 0.1) 50%,
+              rgba(139, 124, 240, 0.07) 53%,
+              transparent 66%);
+  transform: translateX(-125%);
+  opacity: 0;
+}
+.boot.play::before { animation: beam 1.4s cubic-bezier(.3, 0, .2, 1) .3s both; }
+@keyframes beam {
+  0%   { transform: translateX(-125%); opacity: 0; }
+  22%  { opacity: 1; }
+  100% { transform: translateX(125%); opacity: 0; }
+}
+
+.boot-mark { position: relative; display: grid; place-items: center; }
+.boot-moon { width: 21rem; height: 21rem; opacity: 0; }
+.boot.play .boot-moon { animation: moonrise 1.25s cubic-bezier(.16, 1, .3, 1) both; }
+
+/* The crescent draws itself before it fills. pathLength="100" on the path is
+   what makes the dash values readable numbers instead of whatever arc length
+   that particular curve happens to have. */
+.boot .mk-crescent {
+  fill-opacity: 0;
+  stroke: url(#moonGrad);
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(95, 240, 220, 0.7));
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.boot.play .mk-crescent {
+  animation: draw-on 1.15s cubic-bezier(.45, 0, .2, 1) .12s both,
+             fill-on .65s ease-out 1.05s both;
+}
+@keyframes draw-on { to { stroke-dashoffset: 0; } }
+@keyframes fill-on { to { fill-opacity: 1; } }
+
+.boot .mk-orbit { opacity: 0; transform-origin: 50% 50%; }
+.boot.play .mk-orbit { animation: orbit-in 1.5s cubic-bezier(.3, 0, .2, 1) .3s both; }
+@keyframes orbit-in {
+  0%   { opacity: 0; ry: 3px;  transform: rotate(-70deg); }
+  55%  { opacity: 1; }
+  100% { opacity: 1; ry: 24px; transform: rotate(-24deg); }
+}
+
+/* The mark arrives out of the dark instead of fading in flat: it lifts, comes
+   into focus, and the glow only catches up once it has landed. */
+@keyframes moonrise {
+  0%   { opacity: 0; transform: translateY(2.3rem) scale(.72); }
+  40%  { opacity: 1; }
+  100% { opacity: 1; transform: none;
+         filter: drop-shadow(0 0 34px rgba(95, 240, 220, 0.7))
+                 drop-shadow(0 0 84px rgba(185, 140, 245, 0.45)); }
+}
+
+.boot-mark::after {
+  content: "";
+  position: absolute; z-index: -1;
+  width: 30rem; height: 30rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79, 227, 208, 0.2),
+                                      rgba(139, 124, 240, 0.1) 45%, transparent 70%);
+  opacity: 0;
+}
+.boot.play .boot-mark::after { animation: bloom 1.6s ease-out both; }
+@keyframes bloom {
+  0%   { opacity: 0; transform: scale(.35); }
+  45%  { opacity: 1; }
+  100% { opacity: .6; transform: scale(1); }
+}
+
+/* One pass of the same conic sweep the running rows use, so the cold open is
+   built from the app's own vocabulary rather than a separate idea. */
+.boot-sweep {
+  position: absolute;
+  width: 19rem; height: 19rem;
+  border-radius: 50%;
+  padding: 1px;
+  opacity: 0;
+  background: conic-gradient(from var(--spin),
+              transparent 0deg, rgba(79, 227, 208, 0.95) 32deg,
+              rgba(139, 124, 240, 0.55) 62deg, transparent 124deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.boot.play .boot-sweep {
+  animation: sweep 1.5s cubic-bezier(.4, 0, .2, 1) .12s both,
+             boot-fade 1.5s ease-out .12s both;
+}
+@keyframes boot-fade { 0% { opacity: 0; } 26% { opacity: 1; } 100% { opacity: 0; } }
+
+.boot-word {
+  font-size: 1.75rem;
+  line-height: 1;
+  opacity: 0;
+}
+.boot.play .boot-word { animation: wordmark-settle .85s cubic-bezier(.22, .9, .3, 1) .42s both; }
+.boot-word span   { color: var(--txt2); font-weight: 300; }
+.boot-word strong { color: #fff; font-weight: 650; margin-left: 0.32em; }
+
+/* Letter-spacing closing inward reads as the name resolving into focus, and it
+   is the one text animation that costs no layout outside this element. */
+@keyframes wordmark-settle {
+  from { opacity: 0; letter-spacing: 0.42em; filter: blur(5px); }
+  to   { opacity: 1; letter-spacing: -0.015em; filter: blur(0); }
+}
+
+.boot-bar {
+  width: 13rem; height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  opacity: 0;
+}
+.boot.play .boot-bar { animation: tab-in .3s ease-out .5s both; }
+.boot-bar > i {
+  display: block; height: 100%; width: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--teal) 55%, var(--violet));
+  box-shadow: 0 0 12px rgba(79, 227, 208, 0.9);
+}
+.boot.play .boot-bar > i { animation: boot-fill 1.02s cubic-bezier(.4, 0, .2, 1) .5s both; }
+@keyframes boot-fill { to { width: 100%; } }
+
+/* No reduced-motion exception here on purpose. Windows reports "reduce" when
+   its own animation setting is off, and hiding the cold open on that signal is
+   what made it look like the sequence never existed. It is under two seconds
+   and any key or click ends it. */
+
+/* ── the column footer ───────────────────────────────────────────────── */
+.side-foot {
+  padding: 0.9rem 1.15rem 1rem;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.25));
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Idle life
+   Almost everything that moves in this app is driven by a transfer, so with
+   nothing running the window was completely still -- which is most of the time
+   somebody is looking at it. These four are the only loops that run at rest,
+   they are all slow, and none of them claims anything is happening.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The blooms drift and breathe. 40s is long enough that it is never the thing
+   you notice, only the thing that stops the window feeling like a screenshot. */
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-2.5%, 1.5%, 0) scale(1.06); }
+}
+
+/* A highlight crosses the Start button while it is waiting to be pressed, and
+   stops the moment a run owns it. */
+.primary[data-state="idle"]::after,
+.primary[data-state="done"]::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.4) 48%, transparent 60%);
+  transform: translateX(-120%);
+  animation: btn-sheen 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes btn-sheen {
+  0%, 72% { transform: translateX(-120%); }
+  100%    { transform: translateX(120%); }
+}
+
+/* The top hairline keeps a slow travelling glint while the app sits idle, so
+   the chrome has a pulse even when the numbers are all zero. */
+.topbar { position: relative; overflow: hidden; }
+.topbar::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 255, 233, 0.85), transparent);
+  width: 32%;
+  animation: rail 11s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes rail {
+  0%, 100% { transform: translateX(-60%); opacity: 0; }
+  15%      { opacity: 1; }
+  85%      { opacity: 1; }
+  100%     { transform: translateX(280%); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Transfer rows: weight follows state
+   Every row used to carry identical weight, so a batch of 120 read as one grey
+   wall and the four files actually moving were the same size as the hundred
+   that had finished. Nothing here touches a ring, a percentage or a rate --
+   those belong to open issues.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.fhost {
+  margin-left: 0.15rem;
+  padding: 0.06rem 0.36rem;
+  border-radius: 5px;
+  font-size: 0.52rem; font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--txt3);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+}
+.fhost[data-host="dn"] { color: var(--teal);   background: rgba(79, 227, 208, 0.1);  border-color: rgba(79, 227, 208, 0.22); }
+.fhost[data-host="ff"] { color: var(--violet); background: rgba(139, 124, 240, 0.1); border-color: rgba(139, 124, 240, 0.22); }
+
+/* In flight: more room, brighter name, a progress bar with actual presence. */
+.frow[data-state="download"],
+.frow[data-state="extract"],
+.frow[data-state="kill"] { padding-top: 0.75rem; padding-bottom: 0.9rem; }
+.frow[data-state="download"] .fname,
+.frow[data-state="extract"] .fname { color: #fff; font-size: 0.74rem; }
+.frow[data-state="download"] .foot { height: 3px; bottom: 0.34rem; }
+
+/* Finished: quieter and tighter, so the eye slides past the tail. */
+.frow[data-state="ok"],
+.frow[data-state="fail"] { padding-top: 0.48rem; padding-bottom: 0.55rem; }
+.frow[data-state="ok"] .fname,
+.frow[data-state="fail"] .fname { color: var(--txt2); }

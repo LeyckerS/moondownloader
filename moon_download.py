@@ -21,7 +21,7 @@ import aiohttp
 from moon_extract import referer_for
 import moon_extract as _moon_extract
 
-VERSION = "v2.0"
+VERSION = "v2.2"
 
 DEFAULT_DL_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads", "datanodes")
 

@@ -19,6 +19,11 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 const POLL_MS = 80;
 const SPARK_N = 90;
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
+/* Reference rate for the ambience glow only -- not a cap, not a target, and it
+   never touches a number on screen. Picked so a normal fast run sits near the
+   top of the curve without pinning it. */
+const HEAT_REF_MBS = 60;
 
 /* ── i18n ─────────────────────────────────────────────────────────────── */
 const I18N = {
@@ -48,6 +53,20 @@ const I18N = {
     st_ok: "saved", st_fail: "failed", st_kill: "restarting",
     chip_auto: "auto", chip_chrome: "chrome", chip_api: "api key",
     no_proxy: "no proxy",
+    filter_ph: "filter", f_all: "All", f_active: "Active", f_ok: "Saved", f_fail: "Failed",
+    filter_none: "nothing matches", filter_none_sub: "clear the filter to see the rest",
+    drop_title: "drop links or a .txt", drop_sub: "they are appended to the list",
+    help_title: "Shortcuts",
+    k_start: "Start, or stop a running batch",
+    k_open: "Load a .txt of links",
+    k_filter: "Filter the transfer list",
+    k_help: "This panel",
+    k_esc: "Close, or clear the filter",
+    copy_link: "Copy the source link", copied: "link copied", copy_failed: "could not copy",
+    sum_title: "Batch finished", sum_saved: "Saved", sum_failed: "Failed",
+    sum_bytes: "Downloaded", sum_elapsed: "Elapsed",
+    sum_copy_failed: "Copy failed links",
+    copied_n: (n) => `${n} link${n === 1 ? "" : "s"} copied`,
     links_n: (n) => `${n} link${n === 1 ? "" : "s"}`,
     remaining: (n) => `${n} file${n === 1 ? "" : "s"} remaining`,
     counts: (ok, ko, kill) => `${ok} ok · ${ko} failed · ${kill} kill`,
@@ -87,6 +106,20 @@ const I18N = {
     st_ok: "salvato", st_fail: "errore", st_kill: "riavvio",
     chip_auto: "auto", chip_chrome: "chrome", chip_api: "api key",
     no_proxy: "no proxy",
+    filter_ph: "filtra", f_all: "Tutti", f_active: "Attivi", f_ok: "Salvati", f_fail: "Errori",
+    filter_none: "nessuna corrispondenza", filter_none_sub: "azzera il filtro per rivedere il resto",
+    drop_title: "trascina link o un .txt", drop_sub: "vengono aggiunti in fondo alla lista",
+    help_title: "Scorciatoie",
+    k_start: "Avvia, o ferma un batch in corso",
+    k_open: "Carica un .txt di link",
+    k_filter: "Filtra la lista dei trasferimenti",
+    k_help: "Questo pannello",
+    k_esc: "Chiudi, o azzera il filtro",
+    copy_link: "Copia il link sorgente", copied: "link copiato", copy_failed: "copia non riuscita",
+    sum_title: "Batch completato", sum_saved: "Salvati", sum_failed: "Errori",
+    sum_bytes: "Scaricati", sum_elapsed: "Durata",
+    sum_copy_failed: "Copia i link falliti",
+    copied_n: (n) => `${n} link copiati`,
     links_n: (n) => `${n} link`,
     remaining: (n) => `${n} file rimanenti`,
     counts: (ok, ko, kill) => `${ok} ok · ${ko} ko · ${kill} kill`,
@@ -263,6 +296,8 @@ const ui = {
   prevState: new Map(),
   spark: [],
   runState: "idle",
+  filter: "",
+  fstate: "all",
   settingsTimer: null,
   lastMetrics: null,
   lastFiles: null,
@@ -355,6 +390,9 @@ function initSlider(id, outId, suffix = "") {
 
 /* ── run state ────────────────────────────────────────────────────────── */
 function setRunState(state) {
+  // applyLang() calls this with the state it already has, to relabel; comparing
+  // first is what keeps that from re-firing the end-of-run panel.
+  const prev = ui.runState;
   ui.runState = state;
   const pillKey = { idle: "IDLE", running: "RUNNING", stopping: "STOPPING", done: "DONE" }[state] || "IDLE";
   const btnKey = { idle: "start", running: "stop", stopping: "stopping", done: "start" }[state] || "start";
@@ -363,6 +401,7 @@ function setRunState(state) {
   const b = $("#btnStart");
   b.dataset.state = state;
   $("#startLabel").textContent = T(btnKey);
+  if (state === "done" && prev !== "done") showSummary();
 }
 
 function phaseText(m) {
@@ -390,7 +429,9 @@ function renderMetrics(m, relabelOnly = false) {
   roll($("#vDone"), m.dl_done || 0, (v) => String(Math.round(v)));
   $("#uDone").textContent = "/" + (m.dl_total || 0);
   setBar("#barDone", m.dl_done, m.dl_total, m.stage === "downloading" || m.stage === "extracting");
-  $("#vDone").closest(".card").classList.toggle("hot", (m.dl_done || 0) > 0);
+  // Scoped to its own readout, not to the card: speed and completed now share
+  // one card, and two toggles of "hot" on the same element would fight.
+  $("#vDone").closest(".hstat").classList.toggle("hot", (m.dl_done || 0) > 0);
 
   const gb = (m.bytes_total || 0) / 2 ** 30;
   roll($("#vBytes"), gb, (v) => (v >= 0.01 ? v.toFixed(2) : "0"));
@@ -406,7 +447,20 @@ function renderMetrics(m, relabelOnly = false) {
   setBar("#barDownload", m.dl_done, m.dl_total, m.stage === "downloading");
   setBar("#globalBar", m.dl_done, m.dl_total, false);
 
-  if (!relabelOnly) pushSpark(speed);
+  if (!relabelOnly) { pushSpark(speed); setHeat(speed); }
+}
+
+/* Ambience intensity. Scaled against the peak of the run it would saturate and
+   sit there, because a steady transfer is at its own peak almost all the time
+   -- the glow never moved. An absolute reference with a square-root curve keeps
+   the low end visible while leaving headroom, so the room brightens as the run
+   ramps and dims when it stalls. Display only: the speed the engine reports is
+   passed through untouched, this only decides how bright the room is. */
+function setHeat(speed) {
+  const heat = ui.runState === "running"
+    ? Math.min(1, Math.sqrt(Math.max(0, speed) / HEAT_REF_MBS)) * 0.9
+    : 0;
+  document.documentElement.style.setProperty("--heat", heat.toFixed(3));
 }
 
 function setBar(sel, done, total, live = false) {
@@ -421,7 +475,14 @@ function pushSpark(v) {
   ui.spark.push(v);
   if (ui.spark.length > SPARK_N) ui.spark.shift();
   const pts = ui.spark;
-  if (pts.length < 4) return;
+  // An idle window still polls, so the buffer fills with zeroes and a rule keyed
+  // only on sample count would draw itself across the whole card at the
+  // baseline -- which is what it did, and it read as a stray hairline. The mean
+  // is worth drawing when there is signal to average, not when there is a
+  // window open.
+  const live = pts.some((v) => v > 0.01);
+  $("#sparkMean").style.visibility = live ? "visible" : "hidden";
+  if (pts.length < 4 || !live) return;
   // 22% headroom: a flat series scaled to its own max fills the whole box and
   // reads as a solid block instead of a line.
   const peak = Math.max(...pts, 0.1) * 1.22;
@@ -431,9 +492,22 @@ function pushSpark(v) {
   const line = coords.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
   $("#sparkLine").setAttribute("points", line);
   $("#sparkArea").setAttribute("points", `${line} 100,30 ${coords[0][0].toFixed(2)},30`);
-  const head = coords[coords.length - 1];
-  $("#sparkHead").setAttribute("cx", head[0].toFixed(2));
-  $("#sparkHead").setAttribute("cy", head[1].toFixed(2));
+
+  // Only across the samples that exist. Drawn from 0 it reads as a series that
+  // is there before the run has produced anything.
+  const mean = pts.reduce((a, b) => a + b, 0) / pts.length;
+  const meanY = (29 - (mean / peak) * 26).toFixed(2);
+  const meanLine = $("#sparkMean");
+  meanLine.setAttribute("x1", coords[0][0].toFixed(2));
+  meanLine.setAttribute("y1", meanY);
+  meanLine.setAttribute("y2", meanY);
+
+  // The head is an HTML dot over the plot, so it is placed in percentages of
+  // the box rather than in viewBox units.
+  const [hx, hy] = coords[coords.length - 1];
+  const head = $("#sparkHead");
+  head.style.setProperty("--hx", `${hx.toFixed(2)}%`);
+  head.style.setProperty("--hy", `${((hy / 30) * 100).toFixed(2)}%`);
 }
 
 /* ── transfers ────────────────────────────────────────────────────────── */
@@ -462,6 +536,19 @@ function renderFiles(files) {
       row._speed = row.querySelector(".fspeed");
       row._ring = row.querySelector(".ring-fg");
       row._foot = row.querySelector(".foot > i");
+      // Which host a file came from was nowhere on this list, and it is the
+      // first thing you want when one provider starts failing and the other
+      // does not. Read off the key, which IS the source URL, so no engine
+      // field and no count is involved.
+      const host = row.querySelector(".fhost");
+      host.textContent = { dn: "datanodes", ff: "fuckingfast", ot: "other" }[classify(f.key)];
+      host.dataset.host = classify(f.key);
+      // ui.rows is keyed by the URL and a row is never reassigned to another
+      // one, so closing over the key here stays correct for the row's life.
+      row.querySelector(".frow-copy").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        copyText(f.key, T("copied"), ev.currentTarget);
+      });
       ui.rows.set(f.key, row);
       list.appendChild(row);
     }
@@ -509,11 +596,59 @@ function renderFiles(files) {
   }
 
   // The badge counts what is IN FLIGHT, not how many rows are held. Showing the
-  // row cap ("40") next to 124 completed files was simply a lie.
+  // row cap ("40") next to 124 completed files was simply a lie. It also counts
+  // the whole batch, never the filtered subset: the filter is a way of looking
+  // at the list, not a change to what is running.
   const active = files.filter((f) => f.state === "download" || f.state === "extract"
                                   || f.state === "kill" || f.state === "queue").length;
   $("#fileBadge").textContent = active || "";
-  $("#empty").hidden = files.length > 0 || !$("#log").hidden;
+
+  const shown = applyFilter(files);
+  const filtering = ui.fstate !== "all" || ui.filter.trim() !== "";
+  syncEmpty(filtering && files.length > 0 && shown === 0);
+  $("#empty").hidden = shown > 0 || !$("#log").hidden;
+}
+
+/* ── transfer filter ──────────────────────────────────────────────────── */
+const FSTATE_MATCH = {
+  all: () => true,
+  active: (s) => s === "download" || s === "extract" || s === "kill" || s === "queue",
+  ok: (s) => s === "ok",
+  fail: (s) => s === "fail",
+};
+
+/* Presentation only. These are the rows the engine sent, hidden or shown -- no
+   count the engine owns is recomputed here, and nothing is dropped from the
+   batch by narrowing the view. */
+function applyFilter(files) {
+  const q = ui.filter.trim().toLowerCase();
+  const match = FSTATE_MATCH[ui.fstate] || FSTATE_MATCH.all;
+  let shown = 0;
+  for (const f of files) {
+    const row = ui.rows.get(f.key);
+    if (!row) continue;
+    const visible = match(f.state) && (!q || f.name.toLowerCase().includes(q));
+    row.hidden = !visible;
+    if (visible) shown++;
+  }
+  return shown;
+}
+
+/* The empty panel says two different things. Rewriting data-i18n rather than
+   the text alone is what lets a later language switch pick the right one. */
+function syncEmpty(filtered) {
+  const title = $("#empty p");
+  const sub = $("#empty small");
+  title.dataset.i18n = filtered ? "filter_none" : "empty_title";
+  sub.dataset.i18n = filtered ? "filter_none_sub" : "empty_sub";
+  title.textContent = T(title.dataset.i18n);
+  sub.textContent = T(sub.dataset.i18n);
+}
+
+function setFilter(value) {
+  ui.filter = value;
+  $("#filter").value = value;
+  if (ui.lastFiles) renderFiles(ui.lastFiles);
 }
 
 function appendLog(lines) {
@@ -543,11 +678,21 @@ function initTabs() {
   tabs.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-tab]");
     if (!btn) return;
-    for (const b of tabs.querySelectorAll("button")) b.classList.toggle("on", b === btn);
-    const isLog = btn.dataset.tab === "log";
-    $("#log").hidden = !isLog;
-    $("#files").hidden = isLog;
-    $("#empty").hidden = isLog || ui.rows.size > 0;
+    const swap = () => {
+      for (const b of tabs.querySelectorAll("button")) b.classList.toggle("on", b === btn);
+      const isLog = btn.dataset.tab === "log";
+      $("#log").hidden = !isLog;
+      $("#files").hidden = isLog;
+      $("#empty").hidden = isLog || ui.rows.size > 0;
+    };
+    // startViewTransition snapshots the document, so the swap has to happen
+    // inside the callback. The underline is left outside it: it is a transform
+    // that slides on its own, and captured mid-slide it would jump instead.
+    if (typeof document.startViewTransition === "function" && !REDUCED.matches) {
+      document.startViewTransition(swap);
+    } else {
+      swap();
+    }
     move(btn);
   });
   requestAnimationFrame(() => move(tabs.querySelector("button.on")));
@@ -650,6 +795,197 @@ function initSpotlight() {
   }, { passive: true });
 }
 
+/* ── cold open ────────────────────────────────────────────────────────── */
+/* Held just under the CSS timeline so the overlay leaves while the fill bar is
+   still closing, instead of sitting there finished. */
+const BOOT_MS = 1520;
+
+function initBoot() {
+  const boot = $("#boot");
+  if (!boot) return;
+  // Deliberately not gated on prefers-reduced-motion. Windows reports "reduce"
+  // whenever its own animation setting is off, which is a display preference,
+  // not a request to remove the product's launch sequence -- and skipping it
+  // there is exactly why this looked like it never ran. Any key or click still
+  // ends it instantly.
+  const skip = () => endBoot(boot, false);
+  // Any input ends it immediately. Nobody should sit through this twice.
+  document.addEventListener("pointerdown", skip, { once: true });
+  document.addEventListener("keydown", skip, { once: true });
+
+  whenPainted(() => {
+    if (boot.dataset.done) return;
+    boot.classList.add("play");
+    document.documentElement.classList.add("booted");
+    setTimeout(skip, BOOT_MS);
+  });
+}
+
+/* Two things have to be true before the sequence may start: the document is
+   visible, and the compositor has produced a frame. moon_bridge launches the
+   browser and hands it the URL, so the window can be mapped well after the
+   document finished loading -- and a cold open that played into a window that
+   was not on screen yet is the same as no cold open, which is how this first
+   got reported. */
+function whenPainted(run) {
+  const go = () => requestAnimationFrame(() => requestAnimationFrame(run));
+  if (document.visibilityState === "visible") { go(); return; }
+  document.addEventListener("visibilitychange", function once() {
+    if (document.visibilityState !== "visible") return;
+    document.removeEventListener("visibilitychange", once);
+    go();
+  });
+}
+
+function endBoot(boot, instant) {
+  if (boot.dataset.done) return;
+  boot.dataset.done = "1";
+  // Release the cascade and collapse its offset, so the cards are not still
+  // waiting on an overlay that is already leaving.
+  document.documentElement.classList.add("booted");
+  document.documentElement.style.setProperty("--boot-delay", "0ms");
+  if (instant) { boot.remove(); return; }
+  boot.classList.add("out");
+  setTimeout(() => boot.remove(), 440);
+}
+
+/* ── clipboard ────────────────────────────────────────────────────────── */
+/* The GUI is served from 127.0.0.1, so the async clipboard API is available and
+   is the path this normally takes. It still answers NotAllowedError when the
+   write permission is refused -- group policy, or simply a page opened straight
+   off disk to look at it -- so there is a fallback before giving up. */
+async function copyText(text, okMsg, btn) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch (_e) {
+    ok = execCopy(text);
+  }
+  if (!ok) { toast(T("copy_failed"), true); return; }
+  toast(okMsg);
+  if (btn) {
+    btn.classList.add("done");
+    setTimeout(() => btn.classList.remove("done"), 1200);
+  }
+}
+
+/* Deprecated, and the only thing that works when the permission is denied. The
+   textarea has to be in the document and selectable, so it is placed off-screen
+   rather than hidden -- display:none cannot hold a selection. */
+function execCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (_e) {
+    ok = false;   // execCommand throws on engines that removed it entirely.
+  }
+  ta.remove();
+  return ok;
+}
+
+/* ── run summary ──────────────────────────────────────────────────────── */
+const failedLinks = () => (ui.lastFiles || []).filter((f) => f.state === "fail").map((f) => f.key);
+
+/* Every figure here is read straight off the last snapshot. Nothing is counted
+   a second time: whatever the engine reported is what this panel repeats. */
+function showSummary() {
+  const m = ui.lastMetrics || {};
+  $("#sumOk").textContent = m.ok || 0;
+  $("#sumFail").textContent = m.fail || 0;
+  // Same conversion and the same label as the Downloaded card, deliberately:
+  // one expression to find if the unit ever needs correcting.
+  const gb = (m.bytes_total || 0) / 2 ** 30;
+  $("#sumBytes").textContent = gb >= 0.01 ? `${gb.toFixed(2)} GB` : "0";
+  $("#sumElapsed").textContent = m.elapsed_s > 0 ? fmtClock(m.elapsed_s) : "—";
+  $("#btnCopyFailed").hidden = failedLinks().length === 0;
+  $("#summary").hidden = false;
+}
+
+/* ── drag & drop ──────────────────────────────────────────────────────── */
+/* The whole window is the target, not just the textarea: on a long batch the
+   editor is usually scrolled somewhere else entirely. */
+function initDropzone() {
+  const zone = $("#dropzone");
+  // dragenter and dragleave fire once per element the pointer crosses, so a
+  // plain boolean makes the overlay flicker as it moves over the cards.
+  let depth = 0;
+
+  const carries = (dt) => dt && (dt.types.includes("Files") || dt.types.includes("text/plain"));
+
+  document.addEventListener("dragenter", (ev) => {
+    if (!carries(ev.dataTransfer)) return;
+    ev.preventDefault();
+    depth++;
+    zone.hidden = false;
+  });
+  document.addEventListener("dragover", (ev) => { if (carries(ev.dataTransfer)) ev.preventDefault(); });
+  document.addEventListener("dragleave", () => {
+    depth = Math.max(0, depth - 1);
+    if (!depth) zone.hidden = true;
+  });
+  document.addEventListener("drop", async (ev) => {
+    if (!carries(ev.dataTransfer)) return;
+    ev.preventDefault();
+    depth = 0;
+    zone.hidden = true;
+    const before = editor.links().length;
+    const text = await droppedText(ev.dataTransfer);
+    if (!text.trim()) return;
+    editor.set(mergeLinks(editor.ta.value, text));
+    toast(T("loaded_n", Math.max(0, editor.links().length - before)));
+    scheduleSettingsSave();
+  });
+}
+
+/* getData() has to be read before the first await -- the dataTransfer is
+   emptied once the drop event finishes dispatching. */
+async function droppedText(dt) {
+  const files = Array.from(dt.files || []).filter((f) => /\.txt$/i.test(f.name));
+  if (!files.length) return dt.getData("text/plain") || "";
+  const chunks = await Promise.all(files.map((f) => f.text()));
+  return chunks.join("\n");
+}
+
+/* Appends rather than replaces. Load .txt is the control that replaces, and a
+   drop that wiped a list someone had just pasted would not be undoable. */
+function mergeLinks(current, added) {
+  const base = current.replace(/\s+$/, "");
+  return base ? `${base}\n${added.trim()}` : added.trim();
+}
+
+/* ── keyboard ─────────────────────────────────────────────────────────── */
+const isTyping = (el) => !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+
+function toggleHelp(show) {
+  $("#help").hidden = !show;
+}
+
+function initKeys() {
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      if (!$("#help").hidden) toggleHelp(false);
+      else if (!$("#summary").hidden) $("#summary").hidden = true;
+      else if (document.activeElement === $("#filter")) { setFilter(""); $("#filter").blur(); }
+      return;
+    }
+    if (ev.ctrlKey && ev.key === "Enter") { ev.preventDefault(); $("#btnStart").click(); return; }
+    if (ev.ctrlKey && (ev.key === "o" || ev.key === "O")) { ev.preventDefault(); $("#btnLoadTxt").click(); return; }
+
+    // Bare keys stay out of the way of every field on the page, or "/" could
+    // never be typed into a link and "?" never into a folder name.
+    if (isTyping(document.activeElement) || ev.ctrlKey || ev.altKey || ev.metaKey) return;
+    if (ev.key === "/") { ev.preventDefault(); $("#filter").focus(); $("#filter").select(); }
+    else if (ev.key === "?") { ev.preventDefault(); toggleHelp($("#help").hidden); }
+  });
+}
+
 /* ── main loop ────────────────────────────────────────────────────────── */
 async function poll() {
   try {
@@ -672,6 +1008,9 @@ async function poll() {
 
 /* ── wiring ───────────────────────────────────────────────────────────── */
 async function boot() {
+  // First, and outside the engine check: the overlay retires itself on its own
+  // timer either way, so the too-old warning is never left behind it.
+  initBoot();
   if (engineTooOld()) { showEngineWarning(); return; }
 
   editor.init();
@@ -682,7 +1021,30 @@ async function boot() {
   initSlider("captcha", "outCaptcha", "s");
   initTabs();
   initSpotlight();
+  initDropzone();
+  initKeys();
   applyLang("en");
+
+  $("#filter").addEventListener("input", (ev) => setFilter(ev.target.value));
+
+  $("#fchips").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-fstate]");
+    if (!btn) return;
+    ui.fstate = btn.dataset.fstate;
+    for (const b of $$("#fchips button")) b.classList.toggle("on", b === btn);
+    if (ui.lastFiles) renderFiles(ui.lastFiles);
+  });
+
+  $("#btnHelpClose").addEventListener("click", () => toggleHelp(false));
+  // Clicking the backdrop, not the card, closes it.
+  $("#help").addEventListener("click", (ev) => { if (ev.target === $("#help")) toggleHelp(false); });
+
+  $("#btnSumClose").addEventListener("click", () => { $("#summary").hidden = true; });
+  $("#summary").addEventListener("click", (ev) => { if (ev.target === $("#summary")) $("#summary").hidden = true; });
+  $("#btnCopyFailed").addEventListener("click", (ev) => {
+    const links = failedLinks();
+    copyText(links.join("\n"), T("copied_n", links.length), ev.currentTarget);
+  });
 
   $("#lang").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-lang]");
@@ -786,14 +1148,14 @@ class MockApi {
       ["    ✗  part06.rar: HTTP 403", "fail"],
     ];
     this.live = [
-      { key: "f1", i: 0, state: "ok", pct: 1, mbs: 12.4 },
-      { key: "f2", i: 1, state: "download", pct: 0.62, mbs: 11.1 },
-      { key: "f3", i: 2, state: "download", pct: 0.31, mbs: 8.9 },
-      { key: "f4", i: 3, state: "extract", pct: null, mbs: 0 },
-      { key: "f5", i: 4, state: "download", pct: 0.08, mbs: 4.2 },
-      { key: "f6", i: 5, state: "fail", pct: null, mbs: 0 },
-      { key: "f7", i: 6, state: "kill", pct: 0.44, mbs: 0.3 },
-      { key: "f8", i: 7, state: "queue", pct: null, mbs: 0 },
+      { key: "https://datanodes.to/x1/part01.rar", i: 0, state: "ok", pct: 1, mbs: 12.4 },
+      { key: "https://fuckingfast.co/x2/part02.rar", i: 1, state: "download", pct: 0.62, mbs: 11.1 },
+      { key: "https://datanodes.to/x3/part03.rar", i: 2, state: "download", pct: 0.31, mbs: 8.9 },
+      { key: "https://fuckingfast.co/x4/part04.rar", i: 3, state: "extract", pct: null, mbs: 0 },
+      { key: "https://datanodes.to/x5/part05.rar", i: 4, state: "download", pct: 0.08, mbs: 4.2 },
+      { key: "https://fuckingfast.co/x6/part06.rar", i: 5, state: "fail", pct: null, mbs: 0 },
+      { key: "https://datanodes.to/x7/part07.rar", i: 6, state: "kill", pct: 0.44, mbs: 0.3 },
+      { key: "https://fuckingfast.co/x8/part08.rar", i: 7, state: "queue", pct: null, mbs: 0 },
     ];
     this.seq = 8;
     this.t0 = Date.now();
@@ -816,7 +1178,7 @@ class MockApi {
       this.extracted++;
       this.seq++;
       const i = this.seq % this.names.length;
-      this.live.push({ key: "f" + this.seq, i, state: "download", pct: 0.01, mbs: 3 + Math.random() * 11 });
+      this.live.push({ key: `https://${this.seq % 2 ? "datanodes.to" : "fuckingfast.co"}/x${this.seq}/part.rar`, i, state: "download", pct: 0.01, mbs: 3 + Math.random() * 11 });
       this.log.push([`  → ${this.names[i]}`, "dim"]);
     }
     while (this.live.length > 26) this.live.shift();

@@ -13,11 +13,50 @@
 <div class="ambience" aria-hidden="true"></div>
 <div class="ambience-glow" aria-hidden="true"></div>
 
+<!-- Document-level gradients. Defined once here rather than inside either mark,
+     because the boot overlay is removed from the DOM when it finishes and the
+     topbar mark must not lose its paint with it. -->
+<svg class="defs" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="moonGrad" x1="0" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#7dffe9"/>
+      <stop offset="0.46" stop-color="#8fc6ff"/>
+      <stop offset="1" stop-color="#c99cff"/>
+    </linearGradient>
+    <linearGradient id="orbitGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5ff0dc" stop-opacity=".25"/>
+      <stop offset="0.5" stop-color="#dfe8f6" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#b98cf5" stop-opacity=".25"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- Cold open. Removed from the DOM the moment it is over, and by any click or
+     keypress before that: this is a tool people open to get something done, so
+     it must never be a thing they wait through twice. -->
+<div class="boot" id="boot" aria-hidden="true">
+  <div class="boot-mark">
+    <span class="boot-sweep"></span>
+    <!-- Vector, not the PNG: the crescent draws itself on and the orbit tilts,
+         which a raster mark cannot do at any size. -->
+    <svg class="mark-svg boot-moon" viewBox="-18 -18 136 136" aria-hidden="true">
+      <ellipse class="mk-orbit" cx="50" cy="50" rx="64" ry="24"/>
+      <path class="mk-crescent" pathLength="100"
+            d="M82 14.2 A42 42 0 1 0 82 85.8 A36 36 0 1 1 82 14.2 Z"/>
+    </svg>
+  </div>
+  <div class="boot-word"><span>Moon</span><strong>Downloader</strong></div>
+  <div class="boot-bar"><i></i></div>
+</div>
+
 <div class="app">
 
   <header class="topbar">
     <div class="brand">
-      <img class="mark" src="assets/mark.png" alt="">
+      <svg class="mark-svg mark" viewBox="-18 -18 136 136" aria-hidden="true">
+        <ellipse class="mk-orbit" cx="50" cy="50" rx="64" ry="24"/>
+        <path class="mk-crescent" d="M82 14.2 A42 42 0 1 0 82 85.8 A36 36 0 1 1 82 14.2 Z"/>
+      </svg>
       <div class="brand-text">
         <div class="wordmark"><span>Moon</span><strong>Downloader</strong></div>
         <div class="hosts">datanodes.to<i>·</i>fuckingfast.co</div>
@@ -41,9 +80,10 @@
 
     <!-- ───────────────────────── settings column ───────────────────────── -->
     <aside class="side">
-      <div class="side-scroll">
+      <div class="card side-panel reveal" style="--d:0ms">
+        <div class="side-scroll">
 
-        <section class="card reveal" style="--d:0ms">
+        <section class="sect">
           <div class="card-head">
             <h2 data-i18n="link">Links</h2>
             <span class="count" id="linkCount">0 links</span>
@@ -78,7 +118,7 @@
           </div>
         </section>
 
-        <section class="card reveal" style="--d:60ms">
+        <section class="sect">
           <div class="card-head"><h2 data-i18n="destination">Destination</h2></div>
           <div class="row">
             <input class="field" id="outFolder" spellcheck="false" placeholder="E:\blackops3">
@@ -98,7 +138,7 @@
           </div>
         </section>
 
-        <section class="card reveal" style="--d:120ms">
+        <section class="sect">
           <div class="card-head"><h2><span data-i18n="common">Common</span> <em data-i18n="common_sub">· both methods</em></h2></div>
 
           <label class="slider" data-accent="teal">
@@ -125,7 +165,7 @@
           <p class="note" data-i18n="note_streams">fewer streams = more bandwidth per file; the pipe is still the ceiling</p>
         </section>
 
-        <section class="card accent-teal reveal" style="--d:180ms">
+        <section class="sect">
           <div class="card-head">
             <h2><i class="dot-teal"></i>datanodes.to</h2>
             <span class="chip teal" id="dnChip">chrome</span>
@@ -167,7 +207,7 @@
           <p class="note" data-i18n="dn_api_note">premium API key = direct JSON, no browser, no captcha</p>
         </section>
 
-        <section class="card accent-violet reveal" style="--d:240ms">
+        <section class="sect sect-last">
           <div class="card-head">
             <h2><i class="dot-violet"></i>fuckingfast.co</h2>
             <span class="chip violet">http</span>
@@ -176,59 +216,71 @@
           <p class="note" data-i18n="ff_note">nothing to tune: it opens no Chrome and has no captcha</p>
         </section>
 
-      </div>
+        </div>
 
-      <div class="side-foot">
+        <div class="side-foot">
         <button class="primary" id="btnStart" data-state="idle">
           <svg class="ico-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
           <svg class="ico-stop" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.6"/></svg>
           <span id="startLabel" data-i18n="start">Start</span>
         </button>
+        </div>
       </div>
     </aside>
 
     <!-- ────────────────────────── live column ─────────────────────────── -->
     <section class="main">
 
-      <div class="stats">
-        <article class="card stat reveal" data-accent="teal" style="--d:80ms">
-          <div class="card-head"><h2><i class="dot-teal"></i><span data-i18n="speed">Speed</span></h2></div>
-          <div class="stat-value"><b id="vSpeed">0</b><span id="uSpeed">MB/s</span></div>
-          <svg class="spark" id="spark" viewBox="0 0 100 30" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="var(--teal)" stop-opacity=".38"/>
-                <stop offset="1" stop-color="var(--teal)" stop-opacity="0"/>
-              </linearGradient>
-              <linearGradient id="sparkStroke" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" stop-color="var(--blue)"/>
-                <stop offset="1" stop-color="var(--teal)"/>
-              </linearGradient>
-            </defs>
-            <polygon id="sparkArea" fill="url(#sparkFill)" points=""/>
-            <polyline id="sparkLine" points=""/>
-            <circle id="sparkHead" r="1.7" cx="0" cy="30"/>
-          </svg>
-        </article>
+      <!-- One hero band instead of four equal boxes. On a tool you watch while
+           it works, the rate is the number being stared at; the other three are
+           reference, so they sit small and to the side. -->
+      <article class="card hero reveal" data-accent="teal" style="--d:80ms">
+        <div class="hero-lead">
+          <div class="hero-label"><i class="dot-teal"></i><span data-i18n="speed">Speed</span></div>
+          <div class="hero-value"><b id="vSpeed">0</b><span id="uSpeed">MB/s</span></div>
+        </div>
 
-        <article class="card stat reveal" data-accent="mint" style="--d:140ms">
-          <div class="card-head"><h2><i class="dot-mint"></i><span data-i18n="completed">Completed</span></h2></div>
-          <div class="stat-value"><b id="vDone">0</b><span id="uDone">/0</span></div>
-          <div class="track mini"><i id="barDone"></i></div>
-        </article>
+        <div class="hero-stats">
+          <div class="hstat" data-accent="mint">
+            <span class="hstat-label" data-i18n="completed">Completed</span>
+            <div class="hstat-value"><b id="vDone">0</b><span id="uDone">/0</span></div>
+            <div class="track mini"><i id="barDone"></i></div>
+          </div>
+          <div class="hstat" data-accent="violet">
+            <span class="hstat-label" data-i18n="downloaded">Downloaded</span>
+            <div class="hstat-value"><b id="vBytes">0</b><span>GB</span></div>
+            <div class="hstat-sub" id="subCounts">0 ok · 0 ko · 0 kill</div>
+          </div>
+          <div class="hstat" data-accent="plain">
+            <span class="hstat-label">ETA</span>
+            <div class="hstat-value"><b id="vEta">—</b></div>
+            <div class="hstat-sub" id="subRemaining">0 files remaining</div>
+          </div>
+        </div>
 
-        <article class="card stat reveal" data-accent="violet" style="--d:200ms">
-          <div class="card-head"><h2><i class="dot-violet"></i><span data-i18n="downloaded">Downloaded</span></h2></div>
-          <div class="stat-value"><b id="vBytes">0</b><span>GB</span></div>
-          <div class="sub" id="subCounts">0 ok · 0 ko · 0 kill</div>
+          <!-- The head dot lives outside the SVG on purpose: the plot is drawn
+               with preserveAspectRatio="none" so it can stretch to the card
+               width, and in that space a <circle> renders as a flat ellipse.
+               An HTML dot positioned from the same coordinates stays round. -->
+          <div class="spark-wrap">
+            <svg class="spark" id="spark" viewBox="0 0 100 30" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="var(--teal)" stop-opacity=".24"/>
+                  <stop offset="1" stop-color="var(--teal)" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="sparkStroke" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="var(--blue)"/>
+                  <stop offset="1" stop-color="var(--teal)"/>
+                </linearGradient>
+              </defs>
+              <polygon id="sparkArea" fill="url(#sparkFill)" points=""/>
+              <line class="spark-mean" id="sparkMean" x1="0" x2="100" y1="30" y2="30"/>
+              <polyline id="sparkLine" points=""/>
+            </svg>
+            <i class="spark-head" id="sparkHead" aria-hidden="true"></i>
+          </div>
         </article>
-
-        <article class="card stat reveal" data-accent="plain" style="--d:260ms">
-          <div class="card-head"><h2><i class="dot-plain"></i>ETA</h2></div>
-          <div class="stat-value"><b id="vEta">—</b></div>
-          <div class="sub" id="subRemaining">0 files remaining</div>
-        </article>
-      </div>
 
       <article class="card pipeline reveal" style="--d:300ms">
         <div class="card-head"><h2 data-i18n="pipeline">Pipeline</h2><span class="phase" id="phase">idle</span></div>
@@ -251,17 +303,32 @@
             <button data-tab="log"><span data-i18n="log_tab">Log</span></button>
             <span class="tab-underline" id="tabLine"></span>
           </div>
-          <button class="ghost" id="btnWipe">
-            <svg viewBox="0 0 16 16"><path d="M12.5 2.5 7 8"/><path d="M3 13.5h5"/><path d="M7 8 3 13.5M7 8l1 5.5"/></svg>
-            <span data-i18n="wipe">Clear</span>
-          </button>
+          <div class="feed-tools" id="feedTools">
+            <div class="filter">
+              <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.3"/><path d="M10.2 10.2 14 14"/></svg>
+              <input id="filter" spellcheck="false" autocomplete="off" data-i18n-ph="filter_ph">
+            </div>
+            <div class="fchips" id="fchips">
+              <button data-fstate="all" class="on" data-i18n="f_all">All</button>
+              <button data-fstate="active" data-i18n="f_active">Active</button>
+              <button data-fstate="ok" data-i18n="f_ok">Saved</button>
+              <button data-fstate="fail" data-i18n="f_fail">Failed</button>
+            </div>
+            <button class="ghost" id="btnWipe">
+              <svg viewBox="0 0 16 16"><path d="M12.5 2.5 7 8"/><path d="M3 13.5h5"/><path d="M7 8 3 13.5M7 8l1 5.5"/></svg>
+              <span data-i18n="wipe">Clear</span>
+            </button>
+          </div>
         </div>
 
         <div class="feed-body">
           <div class="files" id="files"></div>
 
           <div class="empty" id="empty">
-            <img src="assets/mark.png" alt="">
+            <svg class="mark-svg" viewBox="-18 -18 136 136" aria-hidden="true">
+              <ellipse class="mk-orbit" cx="50" cy="50" rx="64" ry="24"/>
+              <path class="mk-crescent" d="M82 14.2 A42 42 0 1 0 82 85.8 A36 36 0 1 1 82 14.2 Z"/>
+            </svg>
             <p data-i18n="empty_title">nothing queued</p>
             <small data-i18n="empty_sub">paste the links, pick a folder, hit Start</small>
           </div>
@@ -285,6 +352,57 @@
 
 <div class="toasts" id="toasts"></div>
 
+<!-- Drop target. Covers the window only while something is being dragged over
+     it, so it never sits in front of the controls the rest of the time. -->
+<div class="dropzone" id="dropzone" hidden aria-hidden="true">
+  <div class="dropzone-inner">
+    <svg viewBox="0 0 24 24"><path d="M12 3v11M7.5 9.5 12 14l4.5-4.5"/><path d="M4 17v3h16v-3"/></svg>
+    <p data-i18n="drop_title">drop links or a .txt</p>
+    <small data-i18n="drop_sub">they are appended to the list</small>
+  </div>
+</div>
+
+<div class="modal" id="summary" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sumTitle">
+    <div class="card-head">
+      <h2 id="sumTitle" data-i18n="sum_title">Batch finished</h2>
+      <button class="ghost icon" id="btnSumClose" aria-label="Close">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="sum-grid">
+      <div><span data-i18n="sum_saved">Saved</span><b id="sumOk">0</b></div>
+      <div><span data-i18n="sum_failed">Failed</span><b id="sumFail">0</b></div>
+      <div><span data-i18n="sum_bytes">Downloaded</span><b id="sumBytes">0</b></div>
+      <div><span data-i18n="sum_elapsed">Elapsed</span><b id="sumElapsed">—</b></div>
+    </div>
+    <div class="row gap sum-actions">
+      <button class="ghost" id="btnCopyFailed" hidden>
+        <svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-3h-8v8h3"/></svg>
+        <span data-i18n="sum_copy_failed">Copy failed links</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="help" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="card-head">
+      <h2 id="helpTitle" data-i18n="help_title">Shortcuts</h2>
+      <button class="ghost icon" id="btnHelpClose" aria-label="Close">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <dl class="keys">
+      <dt><kbd>Ctrl</kbd><kbd>Enter</kbd></dt><dd data-i18n="k_start">Start, or stop a running batch</dd>
+      <dt><kbd>Ctrl</kbd><kbd>O</kbd></dt><dd data-i18n="k_open">Load a .txt of links</dd>
+      <dt><kbd>/</kbd></dt><dd data-i18n="k_filter">Filter the transfer list</dd>
+      <dt><kbd>?</kbd></dt><dd data-i18n="k_help">This panel</dd>
+      <dt><kbd>Esc</kbd></dt><dd data-i18n="k_esc">Close, or clear the filter</dd>
+    </dl>
+  </div>
+</div>
+
 <template id="rowTpl">
   <div class="frow">
     <i class="stripe"></i>
@@ -296,9 +414,12 @@
     </svg>
     <div class="frow-text">
       <span class="fname"></span>
-      <span class="fstate"><i></i><em></em><u></u></span>
+      <span class="fstate"><i></i><em></em><u></u><b class="fhost"></b></span>
     </div>
     <span class="fspeed"></span>
+    <button class="frow-copy" data-i18n-title="copy_link" tabindex="-1">
+      <svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-3h-8v8h3"/></svg>
+    </button>
     <div class="foot"><i></i></div>
   </div>
 </template>

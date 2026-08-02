@@ -11,6 +11,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2] — 2026-08-02
+
+### Added
+- **A cold open.** The mark draws itself on as a vector, the wordmark resolves out of a
+  blur, a raking beam crosses the field, and the card cascade is *held* — not merely
+  delayed — until it hands over. Under two seconds, ended instantly by any key or click,
+  and removed from the DOM when it finishes.
+- **The mark is an SVG and it moves.** Crescent and orbit are separate shapes, so the ring
+  tilts continuously: the minor radius is what animates, which reads as a rotation in
+  depth. The same drawing now serves the topbar, the cold open and the empty state, and
+  the PNG survives only as the favicon.
+- **A hero band replaces the four stat cards.** The rate is a 49px figure with the plot
+  spanning the card underneath; completed, downloaded and ETA are reference and sit small.
+- **The settings column is one surface.** Five floating cards became four sections of a
+  single panel divided by a hairline, with Start built into the same object.
+- **Transfer rows carry their provider**, read off the source URL, and their weight follows
+  their state: what is moving gets room and a brighter name, what has finished tightens
+  and recedes.
+- **Filter box and state chips over the transfer list.** Presentation only — rows are
+  hidden, and no count the engine owns is recomputed.
+- **Drag and drop** of links or a `.txt` anywhere on the window, appended rather than
+  replacing what is already there.
+- **Keyboard shortcuts** — `Ctrl+Enter`, `Ctrl+O`, `/`, `?`, `Esc` — with a shortcut panel.
+- **Copy the source link per row**, and an end-of-run summary that reads the last snapshot
+  and can copy every failed link.
+- **Idle motion.** The blooms drift, a glint travels the topbar hairline, the wordmark
+  catches a sheen and Start shows one while it waits. All slow, and none of them claiming
+  that anything is happening.
+
+### Changed
+- **One higher-contrast palette.** The dimmest text tier moves from `#55677f` to `#97a9c1`
+  and the background photograph is pushed back — a real legibility gain in a bright room.
+- **The speed plot.** The head dot leaves the SVG: the plot is drawn with
+  `preserveAspectRatio="none"`, which was rendering a `<circle>` as a flat ellipse. The
+  area wash comes down, and a recessive hairline marks the window mean, since a plot
+  scaled to its own peak cannot otherwise tell steady from spiky. It is drawn only when
+  there is signal to average.
+- **View Transitions** on the Transfers/Log swap, behind a capability check.
+- **Scroll-driven edge fades** on the scrollers, applied to the edge that actually has
+  content past it; when a list does not overflow there is no mask at all.
+- **The `prefers-reduced-motion` block is gone, deliberately.** Windows reports "reduce"
+  whenever its own animation setting is off, and every version of honouring that here
+  removed the thing the release is for — first the whole design, then the cold open, then
+  the logo orbit and the wordmark sheen. The GUI now animates for everyone. Nothing
+  flashes and every loop is slow, but this is a stated choice rather than an oversight,
+  and a motion preference is the obvious thing to add if anyone asks for one.
+- `VERSION` was still `v2.0` after the 2.1 release, so the app under-reported itself for a
+  whole version. It now tracks the tag.
+
 ## [2.1] — 2026-08-01
 
 ### Added
