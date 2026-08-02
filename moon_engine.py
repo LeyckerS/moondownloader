@@ -684,7 +684,7 @@ class Engine:
             "cursor": new_cursor,
             'proxies': self._get_proxy_status(),
             "proxy_info": {
-                "status": proxy_status, 
+                "status": proxy_status,
                 "count": proxy_count
             },
             "tmp": self.scan_tmp() if not running else None,
