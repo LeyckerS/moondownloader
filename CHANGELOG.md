@@ -66,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole version. It now tracks the tag again, at `v3.0`.
 
 ### Fixed
+- **Every `except Exception:` in the extraction and engine layers now names what it catches or
+  says why it cannot.** The last slice narrows the datanodes page flow to `PlaywrightError`
+  and the CDP probe to `(URLError, OSError, JSONDecodeError, KeyError)`, completing the
+  30-handler cleanup begun in #54 across four slices and three contributors
+  (#130, @AdvaitVarhade)
 - **Nothing said that proxies cover downloads only.** `_PROXY_POOL.next()` is consulted in one
   place — `download_file` — so the download session is proxied and nothing else is: the
   datanodes Chrome that answers the Turnstile challenge and the fuckingfast `curl_cffi`
