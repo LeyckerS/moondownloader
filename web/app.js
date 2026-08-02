@@ -703,8 +703,17 @@ function initTabs() {
 function setProxies(n) {
   ui.lastProxies = n;
   const chip = $("#proxyChip");
-  chip.textContent = n ? T("proxy_n", n) : T("no_proxy");
-  chip.className = n ? "chip mint" : "chip";
+
+  const status = n?.status ?? (Array.isArray(n) ? n[0] : null);
+  const count = n?.count ?? (Array.isArray(n) ? n[1] : 0);
+
+  if (status === "none_configured") { // File doesn't exist
+      chip.textContent = T("no_proxy"); 
+  } else if (status === "empty_file") {  // File exists, but 0 valid lines
+      chip.textContent = "0 valid proxies found"; // am just gonna use a hardcoded string for now, someone else add translation keys later?
+  } else if (status === "loaded") { // File exists and has N usable proxies
+      chip.textContent = T("proxy_n", count); 
+  }
 }
 
 function setTmp(n) {
