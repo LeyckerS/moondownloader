@@ -651,7 +651,6 @@ async def _extract_datanodes_on_context(context, url: str,
         return False
 
     async def on_route(route):
-        from playwright.async_api import Error as PlaywrightError
         req   = route.request
         u, rt = req.url, req.resource_type
         try:
@@ -665,7 +664,7 @@ async def _extract_datanodes_on_context(context, url: str,
                 await route.abort()
                 return
             await route.continue_()
-        except (PlaywrightError, Exception):
+        except PlaywrightError:
             pass # Ignore route abort/continue race conditions during request interception
 
     await page.route("**/*", on_route)
@@ -754,7 +753,7 @@ async def _extract_datanodes_on_context(context, url: str,
                         ad = my_popups.pop()
                         try:
                             await ad.close()
-                        except (PlaywrightError, Exception):
+                        except PlaywrightError:
                             pass # Ignore error if ad popup page is already closed or destroyed.
                     last_sweep = now
 
@@ -829,11 +828,11 @@ async def _extract_datanodes_on_context(context, url: str,
         for ad in my_popups:
             try:
                 await ad.close()
-            except (PlaywrightError, Exception):
+            except PlaywrightError:
                 pass # Ignore error if ad popup page was already closed or detached.
         try:
             await page.close()
-        except (PlaywrightError, Exception):
+        except PlaywrightError:
             pass # Ignore error if datanodes page was already closed.
 
     return file_url, cookies_str
@@ -877,6 +876,7 @@ import json
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 
 CDP_PORT      = int(os.environ.get("MOON_CDP_PORT", "9222"))
