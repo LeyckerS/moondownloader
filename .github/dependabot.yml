@@ -8,6 +8,7 @@ updates:
       day: monday
       time: "09:00"
       timezone: Europe/Rome
+    versioning-strategy: increase-if-necessary
     open-pull-requests-limit: 3
     labels:
       - dependencies
