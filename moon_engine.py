@@ -88,8 +88,6 @@ if not HAVE_CURL_CFFI:
 print(f"datanodes: up to {DN_LANES} persistent browser window(s) "
       "(set MOON_DN_LANES to change)")
 
-
-
 class Engine:
 
     def __init__(self):
@@ -142,8 +140,8 @@ class Engine:
 
         self.proxy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxies.txt")
         self._proxy_mtime = 0.0
-        self._proxy_count = 0
         self._proxy_status = "none_configured"
+        self._last_proxy_check = 0.0
 
     def _inc(self, attr, delta=1):
         with self._lock: setattr(self, attr, getattr(self, attr) + delta)
@@ -629,10 +627,15 @@ class Engine:
             snap     = list(self._bytes_acc)
 
         if not running:
-            proxy_status, proxy_count = self._get_proxy_status()
+            self._get_proxy_status()
         else:
             proxy_count = self._proxies
-            proxy_status = "loaded" if proxy_count > 0 else "none_configured"
+            if proxy_count > 0:
+                self._proxy_status = "loaded"
+            elif not os.path.exists(self.proxy_path):
+                self._proxy_status = "none_configured"
+            else:
+                self._proxy_status = "empty_file"
 
         now = time.monotonic()
         recent = [(t, b) for t, b in snap if t > now - 3.0]
@@ -682,10 +685,10 @@ class Engine:
             "files": self._files_payload(),
             "log": lines,
             "cursor": new_cursor,
-            'proxies': self._get_proxy_status(),
+            "proxies": self._proxies,
             "proxy_info": {
-                "status": proxy_status,
-                "count": proxy_count
+                "status": self._proxy_status,
+                "count": self._proxies
             },
             "tmp": self.scan_tmp() if not running else None,
         }
@@ -697,25 +700,34 @@ class Engine:
         return {"ok": True}
 
     def _get_proxy_status(self):
+        # Only do disk i/o every 2 seconds
+        now = time.time()
+        if now - self._last_proxy_check < 2.0:
+            return
+        self._last_proxy_check = now
+
         # 1. Handle missing file
         if not os.path.exists(self.proxy_path):
             self._proxy_mtime = 0.0
-            self._proxy_count = 0
+            self._proxies = 0
             self._proxy_status = "none_configured"
-            return {"status": self._proxy_status, "count": self._proxy_count}
+            return
         # 2. File exists: was it modified?
         mtime = os.path.getmtime(self.proxy_path)
-        if mtime > self._proxy_mtime:  # File changed -> Update timestamp and proxies
+        if mtime > self._proxy_mtime:
             self._proxy_mtime = mtime
-            proxies, skipped = _PROXY_POOL.load(self.proxy_path, is_default=True)
-            # Handle whether load() returned an integer count or a list
-            self._proxy_count = proxies if isinstance(proxies, int) else len(proxies)
-            # 3. Distinguish 0 valid proxies vs N valid proxies
-            if self._proxy_count == 0:
-                self._proxy_status = "empty_file"
-            else:
-                self._proxy_status = "loaded"
-        return {"status": self._proxy_status, "count": self._proxy_count}
+            try:
+                with open(self.proxy_path, "r", encoding="utf-8") as f:
+                    # Update self._proxies directly!
+                    self._proxies = sum(1 for line in f if line.strip() and not line.lstrip().startswith("#"))
+            except OSError:
+                self._proxies = 0
+        # 3. Distinguish 0 valid proxies vs N valid proxies
+        if self._proxies == 0:
+            self._proxy_status = "empty_file"
+        else:
+            self._proxy_status = "loaded"
+        return
 
 # ── entry point ─────────────────────────────────────────────────────────────
 # There is no GUI in here. Start the app with:  python moon_bridge.py

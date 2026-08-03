@@ -52,7 +52,7 @@ const I18N = {
     st_queue: "queued", st_extract: "extracting", st_download: "downloading",
     st_ok: "saved", st_fail: "failed", st_kill: "restarting",
     chip_auto: "auto", chip_chrome: "chrome", chip_api: "api key",
-    no_proxy: "no proxy",
+    no_proxy: "no proxy", empty_proxies: "0 valid proxies found",
     filter_ph: "filter", f_all: "All", f_active: "Active", f_ok: "Saved", f_fail: "Failed",
     filter_none: "nothing matches", filter_none_sub: "clear the filter to see the rest",
     drop_title: "drop links or a .txt", drop_sub: "they are appended to the list",
@@ -105,7 +105,7 @@ const I18N = {
     st_queue: "in coda", st_extract: "estrazione", st_download: "download",
     st_ok: "salvato", st_fail: "errore", st_kill: "riavvio",
     chip_auto: "auto", chip_chrome: "chrome", chip_api: "api key",
-    no_proxy: "no proxy",
+    no_proxy: "no proxy", empty_proxies: "0 proxy validi trovati",
     filter_ph: "filtra", f_all: "Tutti", f_active: "Attivi", f_ok: "Salvati", f_fail: "Errori",
     filter_none: "nessuna corrispondenza", filter_none_sub: "azzera il filtro per rivedere il resto",
     drop_title: "trascina link o un .txt", drop_sub: "vengono aggiunti in fondo alla lista",
@@ -160,7 +160,7 @@ function applyLang(lang) {
     ui.prevState.clear();
     renderFiles(ui.lastFiles);
   }
-  if (ui.lastProxies != null) setProxies(ui.lastProxies);
+  if (ui.lastProxies != null) setProxies();
   if (ui.lastTmp != null) setTmp(ui.lastTmp);
 }
 
@@ -700,19 +700,24 @@ function initTabs() {
 }
 
 /* ── chips ────────────────────────────────────────────────────────────── */
-function setProxies(n) {
-  ui.lastProxies = n;
+function setProxies(info) {
+  // If called empty (language swap etc.), use last info
+  if (!info) info = ui.lastProxyInfo;
+  if (!info) return;   // if we still have no info (eg. first millisecond of startup) stop here.
+  ui.lastProxyInfo = info;
+
+
   const chip = $("#proxyChip");
 
-  const status = n?.status ?? (Array.isArray(n) ? n[0] : null);
-  const count = n?.count ?? (Array.isArray(n) ? n[1] : 0);
-
-  if (status === "none_configured") { // File doesn't exist
-      chip.textContent = T("no_proxy"); 
-  } else if (status === "empty_file") {  // File exists, but 0 valid lines
-      chip.textContent = "0 valid proxies found"; // am just gonna use a hardcoded string for now, someone else add translation keys later?
-  } else if (status === "loaded") { // File exists and has N usable proxies
-      chip.textContent = T("proxy_n", count); 
+  if (info.status === "none_configured") { 
+        chip.textContent = T("no_proxy"); 
+        chip.className = "chip";
+  } else if (info.status === "empty_file") { 
+      chip.textContent = T("empty_proxies");
+      chip.className = "chip warn";
+  } else if (info.status === "loaded") { 
+      chip.textContent = T("proxy_n", info.count);
+      chip.className = "chip mint";
   }
 }
 
@@ -1004,7 +1009,19 @@ async function poll() {
       if (snap.metrics) renderMetrics(snap.metrics);
       if (snap.files) renderFiles(snap.files);
       if (snap.log && snap.log.length) { appendLog(snap.log); ui.cursor = snap.cursor; }
-      if (snap.proxies != null && snap.proxies !== ui.lastProxies) setProxies(snap.proxies);
+      if (
+        snap.proxy_info &&
+        (
+          snap.proxy_info.status !== ui.lastProxyStatus ||
+          snap.proxies !== ui.lastProxies ||
+          LANG !== ui.lastLang
+        )
+      ) {
+        ui.lastProxyStatus = snap.proxy_info.status;
+        ui.lastProxies = snap.proxies;
+        ui.lastLang = LANG;
+        setProxies(snap.proxy_info);
+      }
       if (snap.tmp != null && snap.tmp !== ui.lastTmp) setTmp(snap.tmp);
       if (snap.error) toast(snap.error, true);
     }
