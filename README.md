@@ -24,6 +24,9 @@ Built with Python · Playwright · aiohttp · curl_cffi
 
 > **Best tested: `~250 MB/s` on a 2.5 Gbps fiber — 23.5 GB across 47 files in ~3 minutes**
 
+> **Contributions welcome** — [the roadmap](https://github.com/LeyckerS/moondownloader/issues/39) ranks everything open by size and by whether it needs Windows. Most of it doesn't.
+> Three issues are held for anyone who has never had a pull request merged anywhere.
+
 <br>
 
 </div>

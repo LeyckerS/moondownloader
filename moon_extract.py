@@ -626,6 +626,8 @@ async def _extract_datanodes_on_context(context, url: str,
     unopened gate, or an unsolved Turnstile. Called by extract_datanodes(),
     which owns lane acquisition — this half owns only the page-level flow.
     """
+    from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+
     page      = await context.new_page()
     captured  = asyncio.Event()
     holder: list[str] = []
@@ -662,8 +664,8 @@ async def _extract_datanodes_on_context(context, url: str,
                 await route.abort()
                 return
             await route.continue_()
-        except Exception:
-            pass
+        except PlaywrightError:
+            pass # Ignore route abort/continue race conditions during request interception
 
     await page.route("**/*", on_route)
     # A same-tab navigation, a popup, or a real download event also carries the
@@ -722,8 +724,8 @@ async def _extract_datanodes_on_context(context, url: str,
 
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=25000)
-        except Exception:
-            pass
+        except (PlaywrightError, PlaywrightTimeoutError):
+            pass # Ignore page navigation/load timeout; proceed with DOM evaluation.
         if await _dn_eval(page, DN_DEAD_JS, default=False):
             return None, None
 
@@ -751,8 +753,8 @@ async def _extract_datanodes_on_context(context, url: str,
                         ad = my_popups.pop()
                         try:
                             await ad.close()
-                        except Exception:
-                            pass
+                        except PlaywrightError:
+                            pass # Ignore error if ad popup page is already closed or destroyed.
                     last_sweep = now
 
                 st = await _dn_eval(page, DN_STEP2_JS)
@@ -803,7 +805,8 @@ async def _extract_datanodes_on_context(context, url: str,
                 try:
                     await page.reload(wait_until="domcontentloaded", timeout=20000)
                     await asyncio.sleep(1.0)
-                except Exception:
+                except (PlaywrightError, PlaywrightTimeoutError):
+                    # Return None on failure to reload page after Turnstile hard-fail.
                     return None, None
             else:
                 return None, None
@@ -819,17 +822,18 @@ async def _extract_datanodes_on_context(context, url: str,
             cookies_str = "; ".join(f"{c['name']}={c['value']}"
                                     for c in await context.cookies())
     except Exception as e:
+        # Catch and log unexpected extraction errors during datanodes flow.
         _d("datanodes:", type(e).__name__, str(e)[:120])
     finally:
         for ad in my_popups:
             try:
                 await ad.close()
-            except Exception:
-                pass
+            except PlaywrightError:
+                pass # Ignore error if ad popup page was already closed or detached.
         try:
             await page.close()
-        except Exception:
-            pass
+        except PlaywrightError:
+            pass # Ignore error if datanodes page was already closed.
 
     return file_url, cookies_str
 
@@ -872,6 +876,7 @@ import json
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 
 CDP_PORT      = int(os.environ.get("MOON_CDP_PORT", "9222"))
@@ -965,7 +970,8 @@ def _cdp_alive(port: int) -> str | None:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=1.5) as r:
             return json.load(r).get("webSocketDebuggerUrl")
-    except Exception:
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
+        # Handle connection failures or invalid JSON when Chrome CDP port is inactive.
         return None
 
 
