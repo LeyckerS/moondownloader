@@ -138,7 +138,123 @@ def _ff_headers(file_id: str) -> dict[str, str]:
     }
 
 
-async def extract_fuckingfast(url: str) -> str | None:
+FF_CAPTCHA_MARK = "captcha verification failed"
+FF_BROWSER_TIMEOUT = 75.0
+FF_CLICK_TRIES = 4
+FF_READY_WAIT = 6.0
+
+# The button is gated on `click[!!window.turnstileToken || !!window.dlCleared]`.
+# Note the OR: most of the time Turnstile clears itself here and never hands out
+# a visible token, so insisting on cf-turnstile-response waits for something that
+# is not coming. Either flag being set means the trigger is armed.
+FF_READY_JS = """() => !!(window.turnstileToken || window.dlCleared)"""
+
+# No <form> on the page any more -- htmx owns the submit, so the hx-post element
+# is what has to be clicked.
+FF_CLICK_JS = """() => {
+    const el = document.querySelector('[hx-post*="/go"]');
+    if (!el) return false;
+    el.click();
+    return true;
+}"""
+
+
+async def _ff_browser_extract(get_browser, url: str, file_id: str) -> str | None:
+    """Resolve one fuckingfast link in the shared browser, after /go returned 403.
+
+    fuckingfast put Cloudflare Turnstile in front of POST /f/<id>/go in August
+    2026 and the server answers `captcha verification failed` without a token,
+    which plain HTTPS cannot mint at any TLS fingerprint.
+
+    Two things this has to copy from a human rather than from the datanodes flow:
+    the challenge usually clears itself, so the wait is on the trigger being
+    armed and not on a token appearing; and the first click opens an ad tab
+    instead of submitting, so the tab is closed and the button pressed again.
+    """
+    browser = await get_browser()
+    found: list[str] = []
+
+    async def _on_response(resp):
+        if "/go" in resp.url:
+            target = resp.headers.get("hx-redirect") or ""
+            if "/dl/" in target:
+                found.append(target.strip())
+
+    async def _block_dl(route):
+        # The URL is what we want, not the bytes: the engine downloads it with
+        # range support. Following the redirect here would start a second,
+        # untracked copy of the whole file inside Chrome.
+        await route.abort()
+
+    # Through the SAME pooled context datanodes uses. Giving each link its own
+    # browser.new_context() is the v14.6 mistake recorded above acquire_lane:
+    # several identities from one IP in quick succession read as a bot farm.
+    async with acquire_lane(browser) as context:
+        page = await context.new_page()
+        page.on("response", _on_response)
+
+        async def _close_ad(popup):
+            # The interstitial the first click opens. Closing it is what lets the
+            # second click reach the trigger, exactly as a person does it.
+            try:
+                await popup.close()
+                _d(f"ff {file_id}: closed an ad tab")
+            except Exception:
+                pass    # popup already gone
+
+        # Both of these are bound to the PAGE, not to the context. The context is
+        # shared and lives for the whole session, so a handler or a route added
+        # per link would pile up on it: after a few links every popup fires N
+        # stale closures and every request walks N route handlers. Page-scoped,
+        # they die with the page.
+        page.on("popup", lambda pg: asyncio.ensure_future(_close_ad(pg)))
+        await page.route("**/dl/*", _block_dl)
+        try:
+            await page.goto(f"{FF_HOST}/{file_id}", wait_until="domcontentloaded",
+                            timeout=45000)
+
+            # Give the challenge a chance to clear on its own; only reach for the
+            # widget if it is actually sitting there interactive.
+            t_ready = time.monotonic()
+            while time.monotonic() - t_ready < FF_READY_WAIT:
+                if await _dn_eval(page, FF_READY_JS, default=False):
+                    break
+                if await _dn_eval(page, DN_WIDGET_BOX_JS):
+                    await dn_solve_turnstile(page, DN_HEADLESS)
+                    break
+                await asyncio.sleep(0.4)
+            # Measured on the live page: this flag never arms, and the click
+            # submits regardless -- htmx evaluates the trigger against its own
+            # state, not against what we can read. Logged, never gated on.
+            armed = await _dn_eval(page, FF_READY_JS, default=False)
+            _d(f"ff {file_id}: trigger {'armed' if armed else 'not armed'} "
+               f"after {time.monotonic() - t_ready:.1f}s")
+
+            deadline = time.monotonic() + FF_BROWSER_TIMEOUT
+            for attempt in range(FF_CLICK_TRIES):
+                if found or time.monotonic() > deadline:
+                    break
+                if not await _dn_eval(page, FF_CLICK_JS, default=False):
+                    _d(f"ff {file_id}: no hx-post trigger on the page")
+                    return None
+                _d(f"ff {file_id}: download click {attempt + 1}")
+                t_click = time.monotonic()
+                while not found and time.monotonic() - t_click < 8.0                         and time.monotonic() < deadline:
+                    await asyncio.sleep(0.2)
+
+            if found:
+                _d(f"ff {file_id}: resolved in the browser")
+                return found[0]
+            _d(f"ff {file_id}: no hx-redirect after {FF_CLICK_TRIES} clicks")
+            return None
+        finally:
+            try:
+                await page.close()
+            except Exception:   # page already gone with a crashed browser
+                pass
+
+
+async def extract_fuckingfast(url: str, get_browser=None) -> str | None:
     """Resolve a fuckingfast.co share link to its direct dl.fuckingfast.co URL.
 
     No browser. Returns the direct URL, or None for an unparseable id, a dead
@@ -157,6 +273,7 @@ async def extract_fuckingfast(url: str) -> str | None:
     hdrs   = _ff_headers(file_id)
     sess   = await ff_session()
 
+    needs_captcha = False
     for attempt in range(FF_RETRIES):
         try:
             if sess is not None:
@@ -188,6 +305,10 @@ async def extract_fuckingfast(url: str) -> str | None:
             m = FF_DL_RE.search(body)          # legacy shape, if they ever revert
             if m:
                 return m.group()
+            if status == 403 and FF_CAPTCHA_MARK in body[:200].lower():
+                # Retrying this over HTTP cannot help: the token is the point.
+                needs_captcha = True
+                break
             _d(f"ff {file_id}: status={status} no hx-redirect")
         except Exception as e:
             # network or parsing error triggers a retry
@@ -195,6 +316,12 @@ async def extract_fuckingfast(url: str) -> str | None:
 
         if attempt + 1 < FF_RETRIES:
             await asyncio.sleep(0.6 * (attempt + 1))
+
+    if needs_captcha and get_browser is not None:
+        _d(f"ff {file_id}: captcha required - falling back to the browser")
+        return await _ff_browser_extract(get_browser, url, file_id)
+    if needs_captcha:
+        _d(f"ff {file_id}: captcha required and no browser available")
 
     return None
 
@@ -262,6 +389,25 @@ DN_DEAD_JS = """() => {
     return t.includes('file not found') || t.includes('could not be found')
         || t.includes('file was deleted') || t.includes('has been removed')
         || t.includes('file expired') || t.includes('no such file');
+}"""
+
+DN_SHAPE_JS = """() => {
+    // Which of the two shapes the server sent. datanodes dropped step 1 in
+    // August 2026 and now serves step 2 on the first response, but only
+    // fills it in once Cloudflare has been cleared -- before that the page
+    // is a stub with no controls at all, which is why this cannot key off
+    // 'no step 1 found' and has to wait for positive evidence of either.
+    if (document.getElementById('downloadReveal') &&
+        document.getElementById('method_free')) return 'step1';
+    const txt = document.body ? (document.body.innerText || '') : '';
+    if (/step\\s*2\\s*of\\s*2/i.test(txt)) return 'step2';
+    // The method chooser itself: 'Free Download / Standard speed'. Matching
+    // the label rather than a tag, because Vue consumes <download-countdown>
+    // when it mounts and the attributes go with it.
+    for (const e of document.querySelectorAll('button, a, [role=button]')) {
+        if (/free\\s*download/i.test(e.innerText || '')) return 'step2';
+    }
+    return 'unknown';
 }"""
 
 DN_GATE_JS = """(force) => {
@@ -501,7 +647,11 @@ async def extract_datanodes_api(url: str, api_key: str | None = None) -> str | N
 
 
 DN_WIDGET_BOX_JS = """() => {
-    const d = document.querySelector('.cf-turnstile')
+    // datanodes renders the widget with class="cf-turnstile"; fuckingfast uses
+    // id="cf-turnstile", and its challenge iframe carries no src at all, so
+    // neither of the two original lookups matched there and the auto-click was
+    // left without a target -- the box simply sat there, never ticked.
+    const d = document.querySelector('.cf-turnstile, #cf-turnstile, [data-sitekey]')
           || document.querySelector('iframe[src*="challenges.cloudflare"]')?.parentElement;
     if (!d) return null;
     d.scrollIntoView({block: 'center', behavior: 'instant'});
@@ -693,41 +843,61 @@ async def _extract_datanodes_on_context(context, url: str,
             _d("dead link")
             return None, None
 
-        # ── step 1: wait for the reveal gate, submit exactly once ──────────────
+        # ── which step did the server actually send? ───────────────────────────
+        # It used to be step 1 every time. Since August 2026 datanodes serves
+        # step 2 straight away, and posting step 1 on top of it re-runs SecSave
+        # and invalidates the token step 2 is holding. Both shapes are still
+        # handled: the page decides, not a flag in here.
+        shape    = "unknown"
         gate     = {"present": False, "ready": False}
         t_gate   = time.monotonic()
-        deadline = t_gate + DN_STEP1_GATE_TIMEOUT
+        # The controls only appear once Cloudflare has been answered, and on the
+        # new shape that answer is the operator's to give -- so this wait has to
+        # cover their reaction time, not just the site's own ~6s scan. The step-1
+        # budget stays the floor for the old shape.
+        deadline = t_gate + max(DN_STEP1_GATE_TIMEOUT, DN_MANUAL_CAPTCHA_TIMEOUT)
         while time.monotonic() < deadline:
-            gate = await _dn_eval(page, DN_GATE_JS, False,
-                                  default={"present": False, "ready": False})
-            if gate["ready"]:
+            shape = await _dn_eval(page, DN_SHAPE_JS, default="unknown")
+            if shape == "step2":
                 break
-            if not gate["present"] and await _dn_eval(page, DN_DEAD_JS, default=False):
+            if shape == "step1":
+                gate = await _dn_eval(page, DN_GATE_JS, False,
+                                      default={"present": False, "ready": False})
+                if gate["ready"]:
+                    break
+            elif await _dn_eval(page, DN_DEAD_JS, default=False):
                 return None, None
             await asyncio.sleep(0.3)
-        if not gate["ready"]:
-            # Same escape hatch the site ships for its own broken-bundle case.
-            gate = await _dn_eval(page, DN_GATE_JS, True,
-                                  default={"present": False, "ready": False})
+
+        if shape == "step2":
+            _d(f"step 2 served directly in {time.monotonic() - t_gate:.1f}s "
+               f"- no step-1 POST")
+            await _dn_eval(page, DN_OVERLAY_JS)
+        if shape != "step2":
             if not gate["ready"]:
-                _d("step-1 gate never opened")
+                # Same escape hatch the site ships for its own broken-bundle case.
+                gate = await _dn_eval(page, DN_GATE_JS, True,
+                                      default={"present": False, "ready": False})
+                if not gate["ready"]:
+                    _d("neither step-1 nor step-2 controls appeared - if a "
+                       "Cloudflare challenge is still on screen, answer it")
+                    return None, None
+            _d(f"gate armed in {time.monotonic() - t_gate:.1f}s")
+
+            await _dn_eval(page, DN_OVERLAY_JS)
+            if not await _dn_eval(page, DN_LATCH_JS, default=False):
                 return None, None
-        _d(f"gate armed in {time.monotonic() - t_gate:.1f}s")
+            if not await _dn_eval(page, DN_SUBMIT_JS, default=False):
+                _d("step-1 form missing")
+                return None, None
+            _d("step 1 submitted (single POST, method_free present)")
 
-        await _dn_eval(page, DN_OVERLAY_JS)
-        if not await _dn_eval(page, DN_LATCH_JS, default=False):
-            return None, None
-        if not await _dn_eval(page, DN_SUBMIT_JS, default=False):
-            _d("step-1 form missing")
-            return None, None
-        _d("step 1 submitted (single POST, method_free present)")
-
-        try:
-            await page.wait_for_load_state("domcontentloaded", timeout=25000)
-        except (PlaywrightError, PlaywrightTimeoutError):
-            pass # Ignore page navigation/load timeout; proceed with DOM evaluation.
-        if await _dn_eval(page, DN_DEAD_JS, default=False):
-            return None, None
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=25000)
+            except (PlaywrightError, PlaywrightTimeoutError):
+                pass # Ignore page navigation/load timeout; proceed with DOM evaluation.
+            if await _dn_eval(page, DN_DEAD_JS, default=False):
+                return None, None
 
         # ── step 2: Turnstile + countdown, then the trigger chain ─────────────
         for hard_fail_retry in range(2):        # one reload if Turnstile hard-fails

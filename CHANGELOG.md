@@ -13,6 +13,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0] — 2026-08-05
+
+Both providers changed the way they hand out links and every download stopped.
+This release is the repair. The GUI is unchanged since 3.0.
+
+### Fixed
+- **datanodes.to removed step 1.** The share URL used to return a form whose
+  submit carried `name="method_free" value="Free Download >>"`; the page now
+  answers with step 2 directly, tokens already minted, and says so on screen
+  ("STEP 2 OF 2"). The extractor waited 22s for `#downloadReveal` and
+  `#method_free`, timed out and gave up before ever reaching the trigger chain
+  that was already working — the failing runs are 22.5s per link against a 22.0s
+  budget. It now waits for whichever shape the server sends and branches on the
+  page rather than on an assumption; the old two-step path is still taken when
+  the old markup arrives. Skipping the obsolete POST also matters on its own: a
+  second `POST /download` re-runs SecSave and invalidates the token step 2 is
+  holding, so the run was destroying its own session.
+- **The wait now covers the operator's reaction time.** On the new shape the
+  controls only appear once Cloudflare has been answered, and 22s is not a human
+  budget. It is `max(step-1 budget, manual captcha budget)` — the GUI's Captcha
+  slider, 30-600s.
+- **fuckingfast.co put Turnstile in front of `POST /f/<id>/go`.** The endpoint
+  answers `403 captcha verification failed` without a `cf-turnstile-response`
+  token, which no TLS fingerprint can mint. Ruled out first: it is not the TLS
+  impersonation (the page itself returns 200) and not a missing session (same
+  cookies, and an empty token field, both still 403). There is no official
+  alternative — no API, no docs, no premium tier, no registration, and the
+  bundle exposes only upload endpoints. Links that are refused now fall through
+  to the browser the app already opens for datanodes. **A batch fuckingfast
+  still serves over plain HTTPS never opens a window**, so the rule that
+  `tests/test_no_chrome.py` exists to protect still holds.
+- **The Turnstile auto-click had no target on fuckingfast.** The widget locator
+  looked for `.cf-turnstile` as a class and for an iframe whose `src` contains
+  `challenges.cloudflare`; fuckingfast uses it as an **id** and its challenge
+  iframe carries no `src` at all, so both lookups missed and the box was never
+  clicked — visible on screen, sitting there untouched. It now also matches
+  `#cf-turnstile` and `[data-sitekey]`.
+- **The fuckingfast page usually has nothing to solve.** Its trigger is
+  `click[!!window.turnstileToken || !!window.dlCleared]` — note the OR — so
+  waiting for a token waits for something that often never comes. The flow now
+  clicks rather than waits, closes the ad tab the first click opens, and presses
+  again, which is what a person does. Measured: the flag never arms and the
+  click submits anyway.
+- **Per-link browser contexts are gone from that path.** The first version gave
+  each link its own `browser.new_context()` — the v14.6 mistake already recorded
+  above `acquire_lane`, where several identities from one IP read as a bot farm
+  and Turnstile answers with a hard failure. It goes through the same pooled
+  context datanodes uses: one profile, one cookie jar, one `cf_clearance`.
+- **Popup and route handlers are page-scoped.** Registering them on the shared
+  context added one more of each per link; after the first extraction the next
+  one stalled. Bound to the page, they die with it. This is what took the
+  sequence from 1/3 to 3/3.
+
+### Verified
+- datanodes: 5/5 through the CLI end to end, and 2/2 extraction
+- fuckingfast: 3/3 consecutive, 6.8-9.7s per link, auto-solve only
+  (`MOON_DN_CAPTCHA_WAIT=0`, so no manual tick was possible)
+- both providers together: 4/4
+- `pytest tests/ -q`: 24 passed
+
 ## [3.0] — 2026-08-02
 
 ### Added

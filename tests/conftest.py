@@ -19,8 +19,14 @@ import moon_extract  # noqa: E402
 def browser_calls(monkeypatch):
     calls = {"playwright": 0, "open_browser": 0, "close_browser": 0, "shutdown_chrome": 0}
 
-    async def fake_ff(url):
+    async def fake_ff(url, get_browser=None):
         await asyncio.sleep(0.01)
+        # fuckingfast is handed the getter, never a live browser: since the
+        # captcha fallback landed it may need a window, but only after /go has
+        # actually refused the HTTP path. Being given a browser here would mean
+        # the dispatcher opened one up front again.
+        if get_browser is not None and not callable(get_browser):
+            raise AssertionError("extract_fuckingfast got a browser, not a getter")
         return url.replace("fuckingfast.co", "dl.fuckingfast.co") + "?fake"
 
     async def fake_dn(browser, url):

@@ -232,7 +232,9 @@ class Engine:
                 try:
                     parsed = urlparse(url)
                     if FUCKINGFAST_HOST in parsed.netloc:
-                        link = await extract_fuckingfast(url)
+                        # get_browser is passed, not called: fuckingfast only
+                        # reaches for a window if /go refuses it.
+                        link = await extract_fuckingfast(url, get_browser)
                         rec.extract_s = time.monotonic()-t_start
                         if not link:
                             self.log("    ✗  No link found", "fail")

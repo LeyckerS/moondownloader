@@ -40,9 +40,9 @@ const I18N = {
     pages: "Pages", captcha: "Captcha", captcha_hint: "manual wait",
     autodetect: "autodetect", api_key: "API key", premium: "premium",
     dn_api_note: "premium API key = direct JSON, no browser, no captcha",
-    ff_ok: "curl_cffi active · hx-redirect, ~0.25s per link",
+    ff_ok: "curl_cffi active · falls back to the browser when /go asks for a captcha",
     ff_missing: "curl_cffi MISSING · pip install curl_cffi",
-    ff_note: "nothing to tune: it opens no Chrome and has no captcha",
+    ff_note: "since Aug 2026 /go wants a Turnstile token: refused links go through the shared Chrome",
     start: "Start", stop: "Stop", stopping: "Closing…",
     speed: "Speed", completed: "Completed", downloaded: "Downloaded",
     pipeline: "Pipeline", extraction: "Extraction", download_lane: "Download",
@@ -93,9 +93,9 @@ const I18N = {
     pages: "Pages", captcha: "Captcha", captcha_hint: "attesa manuale",
     autodetect: "autodetect", api_key: "API key", premium: "premium",
     dn_api_note: "API key premium = JSON diretto, zero browser, zero captcha",
-    ff_ok: "curl_cffi attivo · hx-redirect, ~0.25s per link",
+    ff_ok: "curl_cffi attivo · ripiega sul browser quando /go chiede un captcha",
     ff_missing: "curl_cffi MANCANTE · pip install curl_cffi",
-    ff_note: "niente da regolare: non apre Chrome, non ha captcha",
+    ff_note: "da ago 2026 /go vuole un token Turnstile: i link rifiutati passano dal Chrome condiviso",
     start: "Avvia", stop: "Stop", stopping: "Chiusura…",
     speed: "Velocita", completed: "Completati", downloaded: "Scaricato",
     pipeline: "Pipeline", extraction: "Estrazione", download_lane: "Download",
@@ -1135,7 +1135,7 @@ async function boot() {
   try {
     const info = await bridge.api.hello();
     if (info) {
-      $("#version").textContent = info.version || "v3.0";
+      $("#version").textContent = info.version || "v4.0";
       if (info.have_curl === false) {
         const line = $("#curlLine");
         line.dataset.i18n = "ff_missing";
@@ -1163,7 +1163,7 @@ class MockApi {
     this.extracted = 6;
     this.bytes = 2.6 * 2 ** 30;
     this.log = [
-      ["▶  85 links  ·  16 extractors  ·  8 streams  ·  3 retries  ·  v3.0", "info"],
+      ["▶  85 links  ·  16 extractors  ·  8 streams  ·  3 retries  ·  v4.0", "info"],
       ["   fuckingfast: direct HTTP   ·   datanodes: 8 pages, captcha 30s", "dim"],
       ["   chrome: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "dim"],
       ["   proxies: 12 loaded — rotating per download", "info"],
@@ -1210,7 +1210,7 @@ class MockApi {
   }
 
   async hello() {
-    return { version: "v3.0 · preview", have_curl: true, settings: {
+    return { version: "v4.0 · preview", have_curl: true, settings: {
       out_folder: "D:\\downloads", mode: "download", workers: 16, dl_streams: 8, retries: 3,
       dn_pages: 8, dn_captcha: 30,
       dn_chrome: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
