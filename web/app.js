@@ -703,19 +703,18 @@ function initTabs() {
 function setProxies(info) {
   // If called empty (language swap etc.), use last info
   if (!info) info = ui.lastProxyInfo;
-  if (!info) return;   // if we still have no info (eg. first millisecond of startup) stop here.
+  if (!info) return; // if we still have no info (eg. first millisecond of startup) stop here.
   ui.lastProxyInfo = info;
-
 
   const chip = $("#proxyChip");
 
-  if (info.status === "none_configured") { 
-        chip.textContent = T("no_proxy"); 
-        chip.className = "chip";
-  } else if (info.status === "empty_file") { 
+  if (info.status === "none_configured") {
+      chip.textContent = T("no_proxy");
+      chip.className = "chip";
+  } else if (info.status === "empty_file") {
       chip.textContent = T("empty_proxies");
       chip.className = "chip warn";
-  } else if (info.status === "loaded") { 
+  } else if (info.status === "loaded") {
       chip.textContent = T("proxy_n", info.count);
       chip.className = "chip mint";
   }

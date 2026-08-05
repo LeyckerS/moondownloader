@@ -99,6 +99,41 @@ async def _close_sess():
 _moon_extract._sess = _sess
 _moon_extract.USER_AGENTS = USER_AGENTS
 
+def parse_proxy_line(line: str) -> dict | None:
+    try:
+        if line.startswith(("http://", "https://", "socks")):
+            return {"url": line, "auth": None}
+        parts = line.split(":")
+        if len(parts) == 4:
+            if re.match(r"^\d+\.\d+\.\d+\.\d+$", parts[0]):
+                ip, port, user, passwd = parts
+            else:
+                user, passwd, ip, port = parts
+            return {
+                "url": f"http://{ip}:{port}",
+                "auth": aiohttp.BasicAuth(user, passwd),
+            }
+        elif len(parts) == 2:
+            ip, port = parts
+            return {"url": f"http://{ip}:{port}", "auth": None}
+    except Exception:
+        pass
+    return None
+
+def count_usable_proxies(path: str) -> tuple[int, int]:
+    if not os.path.exists(path):
+        return 0, 0
+    usable, skipped = 0, 0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if parse_proxy_line(line) is not None:
+                usable += 1
+            else:
+                skipped += 1
+    return usable, skipped
 
 class ProxyPool:
     def __init__(self):
@@ -119,29 +154,12 @@ class ProxyPool:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                try:
-                    if line.startswith(("http://", "https://", "socks")):
-                        loaded.append({"url": line, "auth": None})
-                    else:
-                        parts = line.split(":")
-                        if len(parts) == 4:
-                            if re.match(r"^\d+\.\d+\.\d+\.\d+$", parts[0]):
-                                ip, port, user, passwd = parts
-                            else:
-                                user, passwd, ip, port = parts
-                            loaded.append({
-                                "url": f"http://{ip}:{port}",
-                                "auth": aiohttp.BasicAuth(user, passwd),
-                            })
-                        elif len(parts) == 2:
-                            ip, port = parts
-                            loaded.append({"url": f"http://{ip}:{port}", "auth": None})
-                        else:
-                            skipped += 1
-                except Exception:
-                    # Skip line if proxy parsing or auth formatting fails
+                parsed = parse_proxy_line(line)
+                if parsed is not None:
+                    loaded.append(parsed)
+                else:
                     skipped += 1
-                    continue
+                    
         self.proxies = loaded
         if not loaded:
             print(f"WARNING: proxy file {path} yielded 0 proxies")

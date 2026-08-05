@@ -40,6 +40,7 @@ from moon_download import (
     _close_sess,
     _sanitize_filename,
     download_file,
+    count_usable_proxies,
 )
 
 # ── THEME ──────────────────────────────────────────────────────────────────────
@@ -701,7 +702,7 @@ class Engine:
 
     def _get_proxy_status(self):
         # Only do disk i/o every 2 seconds
-        now = time.time()
+        now = time.monotonic()
         if now - self._last_proxy_check < 2.0:
             return
         self._last_proxy_check = now
@@ -717,9 +718,8 @@ class Engine:
         if mtime > self._proxy_mtime:
             self._proxy_mtime = mtime
             try:
-                with open(self.proxy_path, "r", encoding="utf-8") as f:
-                    # Update self._proxies directly!
-                    self._proxies = sum(1 for line in f if line.strip() and not line.lstrip().startswith("#"))
+                usable, skipped = count_usable_proxies(self.proxy_path)
+                self._proxies = usable
             except OSError:
                 self._proxies = 0
         # 3. Distinguish 0 valid proxies vs N valid proxies
