@@ -108,7 +108,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             recent = [(t, b) for t, b in snap if t > cut]
             mbs = 0.0
             if len(recent) > 1:
-                span = max(now - recent[0][0], 0.05)
+                span = max(min(3.0,now - t0),0.05)
                 mbs  = sum(b for _, b in recent) / span / 1_048_576
             total_dl = sum(b for _, b in snap)
             el = now - t0

@@ -625,7 +625,7 @@ class Engine:
         now = time.monotonic()
         recent = [(t, b) for t, b in snap if t > now - 3.0]
         if len(recent) > 1:
-            span = max(now - recent[0][0], 0.05)
+            span = max(min(3.0,now - t0),0.05)
             mbs = sum(b for _, b in recent) / span / 1_048_576
         else:
             mbs = 0.0

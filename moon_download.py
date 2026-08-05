@@ -531,7 +531,7 @@ async def download_file(
                             pub_cut = now - 3.0
                             while pub_win and pub_win[0][0] < pub_cut:
                                 pub_win.popleft()
-                            pub_span = max(now - pub_win[0][0], 0.25) if pub_win else 1.0
+                            pub_span = max(min(3.0,now - dl_t0), 0.25) if pub_win else 1.0
                             rec.done_bytes = downloaded
                             rec.live_mbs = sum(b for _, b in pub_win) / pub_span / 1_048_576
 
