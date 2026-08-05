@@ -46,10 +46,10 @@ pip install -r requirements.txt -c constraints.txt
 ## Option 3 — CLI (headless)
 
 ```bash
-python moon_cli.py --urls links.txt --output ./downloads --browsers 16 --streams 48
+python moon_cli.py --urls links.txt --output ./downloads --extractors 16 --streams 48
 ```
 
-`--browsers` is the number of parallel extraction **workers**, not browsers: Chrome
+`--extractors` is the number of parallel extraction **workers**, not browsers: Chrome
 opens once and only if a datanodes link shows up. `python moon_cli.py --help` for the
 rest.
 

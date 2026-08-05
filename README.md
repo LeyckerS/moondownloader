@@ -270,7 +270,7 @@ Full write-up: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [Architecture](docs/ARCHITECTURE.md) | how the engine is built, feature by feature |
 | [Engineering notes](docs/ENGINEERING_NOTES.md) | the measurements behind the design decisions |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | 403s, Turnstile failures, CDP conflicts, stalls |
-| [FAQ](docs/FAQ.md) | why curl_cffi is mandatory, what `--browsers` means |
+| [FAQ](docs/FAQ.md) | why curl_cffi is mandatory, what `--extractors` means |
 | [Contributing](CONTRIBUTING.md) | architecture, what counts as a contribution, the verification commands |
 | [Changelog](CHANGELOG.md) | every version since 14.0 |
 

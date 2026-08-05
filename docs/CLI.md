@@ -17,14 +17,16 @@ are ignored.
 |:--|:--|:--|:--|
 | `--urls` | path | required | Text file containing one URL per line. The CLI exits before a run if the file is missing or has no usable URLs. |
 | `--output` | path | required | Directory where downloaded files are written. It is created if needed. |
-| `--browsers` | integer | `8` | Number of parallel extraction workers. Despite the name, it does not start that many browsers: datanodes uses one shared Chrome instance. |
+| `--extractors` | integer | `8` | Number of parallel extraction workers. Despite the name, it does not start that many browsers: datanodes uses one shared Chrome instance. |
+
+`--browsers` remains accepted as a deprecated compatibility alias. It is hidden from `--help`; when both flags are supplied, `--extractors` takes precedence and the CLI prints a warning.
 | `--streams` | integer | `24` | Maximum number of concurrent download streams. |
 | `--retries` | integer | `3` | Maximum extraction attempts per URL. Network retries inside one download are separate. |
 | `--proxies` | path | `proxies.txt` | Proxy-list file to load. Applies to **downloads only** — extraction always goes direct, see below. A missing file, or one that yields no usable proxies, prints a warning — except the implicit default (`proxies.txt` when `--proxies` is omitted), whose absence stays silent as the normal no-proxy state. |
 | `--version` | flag | — | Print the version and exit. Works even without `--urls`/`--output`. |
 
 `--urls` and `--output` are required. The parser accepts integer values for
-`--browsers`, `--streams`, and `--retries`; it does not add further CLI-side range
+`--extractors`, `--streams`, and `--retries`; it does not add further CLI-side range
 validation.
 
 The parser's actual default for `--proxies` is unset (`None`); `proxies.txt` is the
@@ -61,7 +63,7 @@ https://fuckingfast.co/example-b#example-b.zip
 python moon_cli.py \
   --urls fuckingfast-links.txt \
   --output ./downloads/fuckingfast \
-  --browsers 8 \
+  --extractors 8 \
   --streams 24
 ```
 
@@ -80,7 +82,7 @@ https://datanodes.to/example-b
 python moon_cli.py \
   --urls datanodes-links.txt \
   --output ./downloads/datanodes \
-  --browsers 8 \
+  --extractors 8 \
   --streams 24
 ```
 
@@ -101,7 +103,7 @@ https://fuckingfast.co/example-c#example-c.zip
 python moon_cli.py \
   --urls mixed-links.txt \
   --output ./downloads/mixed \
-  --browsers 12 \
+  --extractors 12 \
   --streams 32 \
   --retries 3 \
   --proxies ./proxies.txt
@@ -128,7 +130,7 @@ also writes `failed_links.txt` there.
 |:--|:--|:--|
 | `--urls` | link editor | Both supply the input links. |
 | `--output` | output-folder picker | Both select where downloaded files are written. |
-| `--browsers` | `Extractors` | Both control parallel extraction workers. |
+| `--extractors` | `Extractors` | Both control parallel extraction workers. |
 | `--streams` | `DL streams` | Both limit concurrent downloads. |
 | `--retries` | `Retries` | Both control extraction retries. |
 | `--proxies` | — | The CLI reads a proxy-list file; it is not a GUI panel setting. |

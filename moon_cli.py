@@ -294,12 +294,24 @@ def main():
         description="MoonDownloader CLI — headless downloader for server deployment")
     ap.add_argument("--urls",     required=True,  help="Text file with one URL per line")
     ap.add_argument("--output",   required=True,  help="Output folder for downloaded files")
-    ap.add_argument("--browsers", type=int, default=8,  help="Parallel extraction workers (default: 8)")
+    ap.add_argument("--extractors", type=int, default=None,
+                    help="Parallel extraction workers (default: 8)")
+    ap.add_argument("--browsers", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--streams",  type=int, default=24, help="Concurrent download streams (default: 24)")
     ap.add_argument("--retries",  type=int, default=3,  help="Max retries per link (default: 3)")
     ap.add_argument("--proxies",  default=None, help="Proxy list file (default: proxies.txt)")
     ap.add_argument("--version",  action="version", version=VERSION)
     args = ap.parse_args()
+
+    if args.extractors is not None:
+        n_extractors = args.extractors
+        if args.browsers is not None:
+            print("WARNING: --browsers is deprecated and ignored because --extractors was also provided")
+    elif args.browsers is not None:
+        n_extractors = args.browsers
+        print("WARNING: --browsers is deprecated; use --extractors instead")
+    else:
+        n_extractors = 8
 
     if not os.path.exists(args.urls):
         print(f"ERROR: urls file not found: {args.urls}"); sys.exit(1)
@@ -316,7 +328,7 @@ def main():
     proxy_path = args.proxies if args.proxies is not None else "proxies.txt"
 
     try:
-        asyncio.run(run(urls, args.output, args.browsers, args.streams,
+        asyncio.run(run(urls, args.output, n_extractors, args.streams,
                         args.retries, proxy_path, is_default_proxies))
     except KeyboardInterrupt:
         print("\nInterrupted.")
