@@ -249,8 +249,13 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         on_open=lambda: print("  [chrome] datanodes link found - starting Chrome", flush=True))
 
     try:
-        await asyncio.gather(*[asyncio.create_task(browser_worker(gate.get, i))
-                               for i in range(n_workers)])
+        worker_results = await asyncio.gather(
+            *[asyncio.create_task(browser_worker(gate.get, i)) for i in range(n_workers)],
+            return_exceptions=True,
+        )
+        for wid, result in enumerate(worker_results):
+            if isinstance(result, BaseException):
+                print(f"  [worker {wid} error] {result}")
     finally:
         await gate.aclose()
 

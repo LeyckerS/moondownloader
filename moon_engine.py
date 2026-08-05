@@ -376,7 +376,13 @@ class Engine:
                 output_links, failed_urls, dest_folder, mode, max_retries, telem)
 
         try:
-            await asyncio.gather(*[asyncio.create_task(_launch(i)) for i in range(n_workers)])
+            worker_results = await asyncio.gather(
+                *[asyncio.create_task(_launch(i)) for i in range(n_workers)],
+                return_exceptions=True,
+            )
+            for wid, result in enumerate(worker_results):
+                if isinstance(result, BaseException):
+                    self.log(f"  ✗  worker {wid} failed: {result}", "fail")
         finally:
             if browser_started:
                 self._inc("_browsers", -1)
