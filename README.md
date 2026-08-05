@@ -2,7 +2,7 @@
 
 # 🌙 Moon Downloader
 
-### **V3**
+### **V4**
 
 **Bulk file downloader** — real-Chrome extraction for datanodes.to, pure-HTTP extraction for fuckingfast.co, aiohttp streaming, and a GUI that runs on Edge WebView2.
 
@@ -98,13 +98,30 @@ files done, 0 failed, no browser window opened. Method and instrumentation in
 
 ---
 
-## 🌗 What V3 is
+## 🌗 What V4 is
+
+**Both providers broke, and this is the repair.** The interface is unchanged since V3.
+
+- **datanodes removed step 1.** The share URL used to return a form whose submit carried
+  `name="method_free"`; it now answers with step 2 directly, tokens already minted, and says
+  "STEP 2 OF 2" on screen. The extractor waited 22s for markup that no longer exists and gave up
+  before reaching the trigger chain that was already working.
+- **fuckingfast added Turnstile** to `POST /f/<id>/go`, so the pure-HTTP path returns 403 on its own.
+
+Both are fixed and measured: datanodes 5/5 end to end, fuckingfast 3/3 consecutive at 6.8–9.7s with
+auto-solve only, both together 4/4, 24 tests passing. The full account — including three defects
+introduced while building the fuckingfast path and caught in testing — is in
+[CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## 🖥️ What V3 was
 
 **The interface, rebuilt.** The engine is untouched — extraction, downloading and the CLI are the
 same code they were in 2.1, and that is deliberate: this release changes what you look at, not what
 it does.
 
-| | before | V3 |
+| | before V3 | V3 |
 |:--|:--|:--|
 | **Launch** | the window simply appeared | a cold open under two seconds, skippable, removed from the DOM when done |
 | **Mark** | a 512px PNG | an SVG whose crescent and orbit move independently |
@@ -131,15 +148,21 @@ The two providers stopped having anything in common, so the app stopped pretendi
 
 | | datanodes.to | fuckingfast.co |
 |:--|:--|:--|
-| **Extraction** | real Chrome over CDP + persistent profile | plain HTTPS with a Chrome TLS fingerprint |
-| **Browser** | yes — pages on one window, one identity | **none** |
-| **Captcha** | Turnstile: auto-solve, manual fallback | none |
-| **Cost per link** | seconds | ~0.25 s |
+| **Extraction** | real Chrome over CDP + persistent profile | plain HTTPS first, the shared Chrome when refused |
+| **Browser** | yes — pages on one window, one identity | only for links `/go` refuses |
+| **Captcha** | Turnstile: auto-solve, manual fallback | Turnstile since Aug 2026, same auto-solve |
+| **Cost per link** | seconds | ~0.25 s over HTTPS, ~7 s through the browser |
 | **Settings** | `Pages`, `Captcha wait`, Chrome path, API key | nothing to tune |
 
-A batch of fuckingfast links **never launches Chrome** — not even the Playwright driver's node process.
-A batch that contains one datanodes link opens exactly one shared Chrome, on demand, no matter how many
-extractors are running.
+**This changed in V4.** fuckingfast put Cloudflare Turnstile in front of
+`POST /f/<id>/go` in August 2026: without a `cf-turnstile-response` token the endpoint answers
+`403 captcha verification failed`, and no TLS fingerprint can mint one. Links it refuses now go
+through the same Chrome datanodes uses. A batch fuckingfast still serves over plain HTTPS **opens no
+window at all** — the HTTP path is tried first, every time, and the browser is only reached for after
+a refusal.
+
+A batch that contains one datanodes link opens exactly one shared Chrome, on demand, no matter how
+many extractors are running.
 
 One `BrowserGate` in `moon_extract.py` owns that decision, so the GUI and the CLI behave the same
 way — `tests/test_no_chrome.py` asserts it for both.
