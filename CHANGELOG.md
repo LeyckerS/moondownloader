@@ -73,6 +73,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole version. It now tracks the tag again, at `v3.0`.
 
 ### Fixed
+- **The live speed read about nine times the real rate.** It divided the bytes in a 3-second
+  window by the age of the *oldest retained sample*, which on bursty delivery collapses to a
+  fraction of a second and publishes the burst's peak. Measured: 38 MB/s on screen against a
+  median 4.2 MB/s in the same run's own report. It now divides by the observation window —
+  `min(3.0, time since start)` — in all three places that carried the expression, including
+  `moon_cli.py`, which keeps its own copy (#142, @XEDAB)
+- **The proxy chip said "no proxy" until a run started**, even with a valid `proxies.txt`
+  present — wrong information rather than missing information, on the one control whose
+  failure is silent. Three states are now distinguished: no file, a file yielding nothing
+  usable, and N loaded. The per-line parser was extracted so the pre-run count and
+  `ProxyPool.load()` cannot disagree (#132, @8nt0n)
+- **A failing browser worker aborted its siblings without saying which one failed.** Both
+  gathers now collect exceptions and report each with its worker id, matching the straggler
+  gathers that already did (#143, @PomPomSaturin)
 - **Runtime dependencies have upper bounds again** — `aiohttp>=3.9,<4`, `playwright>=1.40,<2`,
   `curl_cffi>=0.7,<1`, with the lower bounds left where they were. Dependabot is set to
   `increase-if-necessary` so it stops proposing floor-only raises, which forbid old versions
