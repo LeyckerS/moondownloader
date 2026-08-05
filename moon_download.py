@@ -159,7 +159,7 @@ class ProxyPool:
                     loaded.append(parsed)
                 else:
                     skipped += 1
-                    
+
         self.proxies = loaded
         if not loaded:
             print(f"WARNING: proxy file {path} yielded 0 proxies")
