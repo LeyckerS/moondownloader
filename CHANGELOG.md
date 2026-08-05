@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.0] — 2026-08-02
 
 ### Added
+- **`constraints.txt`**, the tested dependency set including transitives, for a reproducible
+  install: `pip install -r requirements.txt -c constraints.txt`. `docs/QUICKSTART.md`
+  documents both modes (#136, @PomPomSaturin)
+- **A `dependency-contract` CI job** that fails when any runtime requirement lacks an upper
+  bound, and installs both the constrained and unconstrained sets under `pip check`. The
+  bounds were added once in #12 and silently lost in an unrelated engine rewrite; this is what
+  stops that happening again (#136, @PomPomSaturin)
 - CI now runs on Python **3.13 and 3.14** as well as 3.10-3.12. The project advertises 3.10+
   and two of the versions covered by that promise had never been exercised — including the
   one development happens on. All five pass (#129, @Vam-si-krish)
@@ -66,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole version. It now tracks the tag again, at `v3.0`.
 
 ### Fixed
+- **Runtime dependencies have upper bounds again** — `aiohttp>=3.9,<4`, `playwright>=1.40,<2`,
+  `curl_cffi>=0.7,<1`, with the lower bounds left where they were. Dependabot is set to
+  `increase-if-necessary` so it stops proposing floor-only raises, which forbid old versions
+  rather than permitting new ones (#136, @PomPomSaturin)
 - **Every `except Exception:` in the extraction and engine layers now names what it catches or
   says why it cannot.** The last slice narrows the datanodes page flow to `PlaywrightError`
   and the CDP probe to `(URLError, OSError, JSONDecodeError, KeyError)`, completing the
