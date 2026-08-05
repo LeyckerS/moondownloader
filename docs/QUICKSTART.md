@@ -36,6 +36,13 @@ python moon_bridge.py                # GUI
 python moon_bridge.py --serve        # server only, prints the URL
 ```
 
+`requirements.txt` installs the latest compatible dependency versions. For the exact
+set tested by the project, use the reproducible install instead:
+
+```bash
+pip install -r requirements.txt -c constraints.txt
+```
+
 ## Option 3 — CLI (headless)
 
 ```bash

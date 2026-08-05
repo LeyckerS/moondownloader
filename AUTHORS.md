@@ -26,6 +26,7 @@ first contribution:
 | [@AashishGupta2007](https://github.com/AashishGupta2007) | narrowed and documented the eight exception handlers in the Chrome-lifecycle slice of `moon_extract.py` (#118) |
 | [@Guflly](https://github.com/Guflly) | made `Engine.stop()` actually close Chrome before returning, so shutting down mid-run no longer leaves an orphaned browser holding its profile lock (#122) |
 | [@basisworks](https://github.com/basisworks) | documented that proxies cover downloads only — establishing that the fuckingfast `curl_cffi` session goes direct too, not just the datanodes browser (#128) |
+| [@PomPomSaturin](https://github.com/PomPomSaturin) | restored the dependency upper bounds without moving the floors, added a tested `constraints.txt`, and wrote the CI job that fails when a requirement has no upper bound — so they cannot be lost a third time (#136) |
 
 Dependabot handles the dependency and action bumps.
 

@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - "**.py"
+      - "requirements.txt"
+      - "constraints.txt"
+      - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
   pull_request:
     paths:
       - "**.py"
+      - "requirements.txt"
+      - "constraints.txt"
+      - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
 
 jobs:
@@ -36,6 +42,44 @@ jobs:
       - name: Lint with ruff
         run: ruff check .
 
+  dependency-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      - name: Verify every runtime dependency has an upper bound
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          missing = []
+          for raw_line in Path("requirements.txt").read_text().splitlines():
+              line = raw_line.split("#", 1)[0].strip()
+              if line and "<" not in line:
+                  missing.append(line)
+
+          if missing:
+              raise SystemExit(f"runtime dependencies without upper bounds: {missing}")
+          PY
+
+      - name: Install latest compatible dependencies
+        run: |
+          python -m venv /tmp/moon-unconstrained
+          /tmp/moon-unconstrained/bin/pip install -r requirements.txt
+          /tmp/moon-unconstrained/bin/pip check
+
+      - name: Install the tested constrained set
+        run: |
+          python -m venv /tmp/moon-constrained
+          /tmp/moon-constrained/bin/pip install -r requirements.txt -c constraints.txt
+          /tmp/moon-constrained/bin/pip check
+
   no-chrome:
     runs-on: ubuntu-latest
     steps:
@@ -50,7 +94,7 @@ jobs:
       # Chrome and the network are stubbed at the moon_extract boundary, so this
       # job needs neither a browser nor a display -- only the engine's own imports.
       - name: Install engine dependencies
-        run: pip install "aiohttp>=3.9" "curl_cffi>=0.7" "pytest==8.*"
+        run: pip install "aiohttp>=3.9,<4" "curl_cffi>=0.7,<1" "pytest==8.*"
 
       - name: A fuckingfast batch must not open a browser
         run: pytest tests/ -q
