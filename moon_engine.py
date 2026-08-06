@@ -138,6 +138,7 @@ class Engine:
         self._thread = None
         self._loop   = None
         self._gate   = None
+        self._active_kill_events = set()
 
         self.proxy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxies.txt")
         self._proxy_mtime = 0.0
@@ -175,9 +176,15 @@ class Engine:
 
             kc       = kill_counts.get(orig_url, 0)
             kill_evt = asyncio.Event()
-            ok, msg, bytes_done = await download_file(
-                proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc,
-                telem=telem, on_event=self.log)
+            with self._lock:
+                self._active_kill_events.add(kill_evt)
+            try:
+                ok, msg, bytes_done = await download_file(
+                    proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc,
+                    telem=telem, on_event=self.log)
+            finally:
+                with self._lock:
+                    self._active_kill_events.discard(kill_evt)
             rec.dl_s = max(time.monotonic()-rec.dl_start, 0.001)
 
             if ok:
@@ -185,6 +192,10 @@ class Engine:
                 spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
                 self.log(f"    ✓  Saved: {filename}{spd}", "ok")
                 rec.status="ok"; mark_done_fn(); self._inc("_dl_done")
+            elif msg == "stall_killed" and self._get("_stop_flag"):
+                rec.status = "stopped"
+                self.log(f"    stop: {filename} interrupted; partial file kept", "warn")
+                mark_done_fn(); self._inc("_dl_done")
             elif msg == "stall_killed":
                 done_mb = bytes_done//(1<<20)
                 new_kc = kc + 1; kill_counts[orig_url] = new_kc
@@ -518,6 +529,7 @@ class Engine:
             self._bytes_acc.clear(); self._t0 = time.monotonic()
             self._t_end = 0.0
             self._tracked.clear()
+            self._active_kill_events.clear()
         with self._log_lock:
             self._log_ring.clear(); self._log_total = 0
 
@@ -563,15 +575,21 @@ class Engine:
 
     def stop(self, timeout: float = 1.5) -> dict:
         running = self._get("_running")
+        kill_events = []
         if running:
             with self._lock:
                 self._stop_flag = True
                 self._state = "stopping"
-            self.log("⏹  stop requested — finishing the downloads in flight...", "warn")
+                kill_events = list(self._active_kill_events)
+            self.log("⏹  stop requested — stopping downloads in flight...", "warn")
 
         with self._lock:
             loop, gate, thread = self._loop, self._gate, self._thread
         deadline = time.monotonic() + max(0.0, timeout)
+
+        if running and loop is not None and loop.is_running():
+            for kill_evt in kill_events:
+                loop.call_soon_threadsafe(kill_evt.set)
 
         if running and loop is not None and gate is not None and loop.is_running():
             try:
