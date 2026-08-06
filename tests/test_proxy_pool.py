@@ -1,5 +1,26 @@
 import pytest
-from moon_download import ProxyPool
+from moon_download import ProxyPool, parse_proxy_line
+
+
+def test_parse_proxy_line_builds_proxy_auth_header():
+    cfg = parse_proxy_line("1.2.3.4:8080:user:pass")
+    assert cfg is not None
+    assert cfg["url"] == "http://1.2.3.4:8080"
+    assert cfg["auth"] == "Basic dXNlcjpwYXNz"
+
+
+def test_parse_proxy_line_builds_auth_header_for_credentials_first():
+    cfg = parse_proxy_line("user:pass:5.6.7.8:9090")
+    assert cfg is not None
+    assert cfg["url"] == "http://5.6.7.8:9090"
+    assert cfg["auth"] == "Basic dXNlcjpwYXNz"
+
+
+def test_parse_proxy_line_no_auth_for_two_part_line():
+    cfg = parse_proxy_line("5.6.7.8:9090")
+    assert cfg is not None
+    assert cfg["url"] == "http://5.6.7.8:9090"
+    assert cfg["auth"] is None
 
 
 def test_proxy_pool_load_valid(tmp_path):

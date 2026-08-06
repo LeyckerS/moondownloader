@@ -111,7 +111,7 @@ def parse_proxy_line(line: str) -> dict | None:
                 user, passwd, ip, port = parts
             return {
                 "url": f"http://{ip}:{port}",
-                "auth": aiohttp.BasicAuth(user, passwd),
+                "auth": _proxy_auth_header(user, passwd),
             }
         elif len(parts) == 2:
             ip, port = parts
@@ -119,6 +119,13 @@ def parse_proxy_line(line: str) -> dict | None:
     except Exception:
         pass
     return None
+
+
+def _proxy_auth_header(user: str, passwd: str) -> str:
+    """Build a Proxy-Authorization header value without deprecated BasicAuth."""
+    if hasattr(aiohttp, "encode_basic_auth"):
+        return aiohttp.encode_basic_auth(user, passwd)
+    return aiohttp.BasicAuth(user, passwd).encode()
 
 def count_usable_proxies(path: str) -> tuple[int, int]:
     if not os.path.exists(path):
@@ -495,7 +502,8 @@ async def download_file(
             req_kwargs = dict(headers=hdrs)
             if dl_proxy:
                 req_kwargs["proxy"] = dl_proxy
-                req_kwargs["proxy_auth"] = dl_proxy_auth
+                if dl_proxy_auth:
+                    hdrs["Proxy-Authorization"] = dl_proxy_auth
 
             async with dl_session.get(proxy_url, **req_kwargs) as r:
                 if r.status == 416:
