@@ -72,6 +72,7 @@ def test_engine_stop_aborts_inflight_download_without_counting_failure(
         kills_so_far,
         telem=None,
         on_event=None,
+        fatal_control=None,
     ):
         download_started.set()
         partial_path = pathlib.Path(dest + ".tmp")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime
+import errno
 import io
 import json
 import os
@@ -305,7 +306,8 @@ class Telemetry:
         if ok_r:
             tb = sum(r.file_bytes for r in ok_r)
             W(f"Total    : {tb/1e9:.2f} GB  @  {tb/el/1e6:.1f} MB/s")
-        W(f"OK: {len(ok_r)}  /  Fail: {len(recs)-len(ok_r)}")
+        fail_r = [r for r in recs if r.status == "fail"]
+        W(f"OK: {len(ok_r)}  /  Fail: {len(fail_r)}")
         W()
         W(f"{'#':<4} {'Filename':<48} {'DL':>7} {'Speed':>10} {'Status'}")
         W("-" * 80)
@@ -326,7 +328,7 @@ class Telemetry:
                 "version": VERSION,
                 "duration_s": round(el, 2),
                 "ok": len(ok_r),
-                "fail": len(recs) - len(ok_r),
+                "fail": len(fail_r),
                 "files": [{k: getattr(r, k) for k in cli_fields} for r in recs],
             }, f, indent=2)
         return lp, jp
@@ -361,7 +363,8 @@ class Telemetry:
         W("── SUMMARY ─────────────────────────────────────────────────────────")
         W(f"  Total links    : {len(recs)}")
         W(f"  Completed OK   : {len(ok_r)}")
-        W(f"  Failed         : {len(recs)-len(ok_r)}")
+        fail_r = [r for r in recs if r.status == "fail"]
+        W(f"  Failed         : {len(fail_r)}")
         W(f"  Stall kills    : {sum(r.stall_kills for r in recs)}")
         if ok_r:
             tb = sum(r.file_bytes for r in ok_r)
@@ -427,7 +430,7 @@ class Telemetry:
                     "config": self.cfg,
                     "total": len(recs),
                     "ok": len(ok_r),
-                    "fail": len(recs) - len(ok_r),
+                    "fail": len(fail_r),
                     "stall_kills": sum(r.stall_kills for r in recs),
                     "median_dl_s": round(med, 2),
                 },
@@ -446,6 +449,38 @@ class _StallKill(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class DiskFullError:
+    """The first ENOSPC observed during one front-end run."""
+
+    folder: str
+    needed_bytes: int
+
+
+class RunFatalControl:
+    """Share one terminal disk-full outcome without reusing stall-kill state."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._disk_full: DiskFullError | None = None
+
+    def report_disk_full(self, folder: str, needed_bytes: int) -> DiskFullError | None:
+        """Keep the first failure so every peer agrees on the same run outcome."""
+        with self._lock:
+            if self._disk_full is not None:
+                return None
+            self._disk_full = DiskFullError(folder, max(1, needed_bytes))
+            return self._disk_full
+
+    @property
+    def disk_full(self) -> DiskFullError | None:
+        with self._lock:
+            return self._disk_full
+
+    def is_set(self) -> bool:
+        return self.disk_full is not None
+
+
 async def download_file(
     proxy_url: str,
     cookies: str,
@@ -456,10 +491,13 @@ async def download_file(
     kills_so_far: int,
     telem: Telemetry | None = None,
     on_event: Callable[[str, str], None] | None = None,
+    *,
+    fatal_control: RunFatalControl | None = None,
 ) -> tuple[bool, str, int]:
     """Download a single file with resume support, stall detection, and proxy rotation."""
     tmp = dest + ".tmp"
     loop = asyncio.get_running_loop()
+    fatal_control = fatal_control or RunFatalControl()
 
     def note(msg: str, tag: str = "warn") -> None:
         """Record a mid-transfer event in the report and surface it live if a front-end is listening."""
@@ -469,10 +507,21 @@ async def download_file(
     detect = kills_so_far < STALL_MAX_KILL
 
     def _write(f, data: bytes):
-        f.write(data)
+        view = memoryview(data)
+        while view:
+            written = f.write(view)
+            if written is None or written <= 0:
+                raise OSError(errno.EIO, "download write made no progress")
+            view = view[written:]
 
     for att in range(DL_INNER_RETRIES):
+        if fatal_control.is_set():
+            return False, "aborted_disk_full", 0
         resume = os.path.getsize(tmp) if os.path.exists(tmp) else 0
+        file_size = 0
+        downloaded = resume
+        last_write_bytes = 0
+        write_persisted_before = resume
         ref = referer_for(proxy_url)
         hdrs = {
             "User-Agent": random.choice(USER_AGENTS),
@@ -498,7 +547,11 @@ async def download_file(
                 req_kwargs["proxy_auth"] = dl_proxy_auth
 
             async with dl_session.get(proxy_url, **req_kwargs) as r:
+                if fatal_control.is_set():
+                    return False, "aborted_disk_full", downloaded
                 if r.status == 416:
+                    if fatal_control.is_set():
+                        return False, "aborted_disk_full", downloaded
                     if os.path.exists(tmp):
                         os.replace(tmp, dest)
                     rec.file_bytes = os.path.getsize(dest) if os.path.exists(dest) else 0
@@ -514,7 +567,9 @@ async def download_file(
                     rec.file_bytes = file_size
 
                 effective_detect = detect and (file_size == 0 or file_size >= STALL_MIN_FILE_BYTES)
-                f = open(tmp, "ab" if resume > 0 else "wb")
+                # Each executor write must reach the filesystem before a peer can
+                # abort the run; buffered close could otherwise flush after ENOSPC.
+                f = open(tmp, "ab" if resume > 0 else "wb", buffering=0)
                 speed_win: collections.deque = collections.deque(maxlen=8000)
                 pub_win: collections.deque = collections.deque(maxlen=600)
                 last_pub = dl_t0
@@ -525,6 +580,8 @@ async def download_file(
                     buf: list[bytes] = []
                     bufsz = 0
                     async for chunk in r.content.iter_chunked(RECV_CHUNK):
+                        if fatal_control.is_set():
+                            return False, "aborted_disk_full", downloaded
                         if not chunk:
                             break
                         if kill_evt.is_set():
@@ -540,6 +597,10 @@ async def download_file(
                             data = b"".join(buf)
                             buf = []
                             bufsz = 0
+                            if fatal_control.is_set():
+                                return False, "aborted_disk_full", downloaded
+                            last_write_bytes = len(data)
+                            write_persisted_before = os.path.getsize(tmp)
                             await loop.run_in_executor(_POOL, _write, f, data)
 
                         elapsed = now - dl_t0
@@ -574,11 +635,18 @@ async def download_file(
                                         raise _StallKill()
 
                     if buf:
-                        bytes_acc.append((time.monotonic(), sum(len(b) for b in buf)))
-                        await loop.run_in_executor(_POOL, _write, f, b"".join(buf))
+                        data = b"".join(buf)
+                        if fatal_control.is_set():
+                            return False, "aborted_disk_full", downloaded
+                        bytes_acc.append((time.monotonic(), len(data)))
+                        last_write_bytes = len(data)
+                        write_persisted_before = os.path.getsize(tmp)
+                        await loop.run_in_executor(_POOL, _write, f, data)
                 finally:
                     f.close()
 
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
             os.replace(tmp, dest)
             dl_s = max(time.monotonic() - dl_t0, 0.001)
             net = downloaded - resume
@@ -589,20 +657,53 @@ async def download_file(
             return True, "ok", 0
 
         except _StallKill:
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
             return False, "stall_killed", downloaded
-        except (aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError):
-            note(f"connection dropped att {att+1}", "retry")
-            if att < DL_INNER_RETRIES - 1:
-                await asyncio.sleep(0.5 * (att + 1))
-                continue
-            return False, "connection dropped", downloaded
         except asyncio.TimeoutError:
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
             note(f"timeout att {att+1}", "retry")
             if att < DL_INNER_RETRIES - 1:
                 await asyncio.sleep(1 + att)
                 continue
             return False, "timeout", downloaded
+        except OSError as e:
+            if e.errno == errno.ENOSPC:
+                try:
+                    persisted = os.path.getsize(tmp)
+                except OSError:
+                    persisted = 0
+                if file_size > 0:
+                    needed = max(file_size - persisted, 1)
+                else:
+                    persisted_in_flush = max(persisted - write_persisted_before, 0)
+                    needed = max(last_write_bytes - persisted_in_flush, 1)
+                disk_full = fatal_control.report_disk_full(
+                    os.path.dirname(os.path.abspath(dest)), needed)
+                if disk_full is not None:
+                    note(
+                        f"Disk full in {disk_full.folder}: need {disk_full.needed_bytes:,} bytes to continue",
+                        "fail",
+                    )
+                    return False, "disk_full", downloaded
+                return False, "aborted_disk_full", downloaded
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
+            err = str(e)
+            note(f"error att {att+1}: {err}", "retry")
+            return False, err, downloaded
+        except (aiohttp.ClientPayloadError, aiohttp.ServerDisconnectedError):
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
+            note(f"connection dropped att {att+1}", "retry")
+            if att < DL_INNER_RETRIES - 1:
+                await asyncio.sleep(0.5 * (att + 1))
+                continue
+            return False, "connection dropped", downloaded
         except Exception as e:
+            if fatal_control.is_set():
+                return False, "aborted_disk_full", downloaded
             err = str(e)
             note(f"error att {att+1}: {err}", "retry")
             if att < DL_INNER_RETRIES - 1 and ("ContentLengthError" in err or "not enough data" in err.lower()):

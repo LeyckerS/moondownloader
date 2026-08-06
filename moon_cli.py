@@ -19,6 +19,7 @@ from moon_download import (
     _close_sess,
     _sanitize_filename,
     download_file,
+    RunFatalControl,
 )
 
 # ── EXTRACTION ────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
     ok_count      = 0
     fail_count    = 0
     dls_active    = 0
+    fatal_control = RunFatalControl()
 
     cfg = {"browsers": n_workers, "dl_streams": max_dl, "retries": max_retries,
            "total_links": len(urls)}
@@ -101,7 +103,12 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
     stop_progress = asyncio.Event()
     async def progress_loop():
         while not stop_progress.is_set():
-            await asyncio.sleep(2.0)
+            try:
+                await asyncio.wait_for(stop_progress.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
+            if stop_progress.is_set():
+                break
             snap = list(bytes_acc)
             now  = time.monotonic()
             cut  = now - 3.0
@@ -126,49 +133,61 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
     async def do_dl(proxy_url, cookies, filename, orig_url, rec):
         nonlocal ok_count, fail_count, dls_active
         async with dl_sem:
+            if fatal_control.is_set():
+                rec.status = "aborted"
+                return
             with lock: dls_active += 1
-            dest = os.path.join(output_dir, filename)
+            try:
+                dest = os.path.join(output_dir, filename)
 
-            if os.path.exists(dest):
-                with lock:
-                    ok_count += 1; dls_active -= 1
-                print(f"  [exists] {filename}")
-                rec.status = "ok"; rec.dl_s = 0.0
-                mark_done(); return
+                if os.path.exists(dest):
+                    with lock: ok_count += 1
+                    print(f"  [exists] {filename}")
+                    rec.status = "ok"; rec.dl_s = 0.0
+                    mark_done(); return
 
-            kc       = kill_counts.get(orig_url, 0)
-            kill_evt = asyncio.Event()
-            ok, msg, bytes_done = await download_file(
-                proxy_url, cookies, dest, rec, bytes_acc, kill_evt, kc,
-                on_event=lambda msg, tag: print(f"  [{tag}] {msg}", flush=True))
-            rec.dl_s = max(time.monotonic() - rec.dl_start, 0.001)
+                kc       = kill_counts.get(orig_url, 0)
+                kill_evt = asyncio.Event()
+                ok, msg, bytes_done = await download_file(
+                    proxy_url, cookies, dest, rec, bytes_acc, kill_evt, kc,
+                    on_event=lambda msg, tag: print(f"  [{tag}] {msg}", flush=True),
+                    fatal_control=fatal_control)
+                rec.dl_s = max(time.monotonic() - rec.dl_start, 0.001)
 
-            if ok:
-                with lock: ok_count += 1
-                spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
-                print(f"  [ok] {filename}{spd}")
-                rec.status = "ok"; mark_done()
-            elif msg == "stall_killed":
-                new_kc = kc + 1; kill_counts[orig_url] = new_kc
-                print(f"  [kill#{new_kc}] {filename}  ({bytes_done//(1<<20)}MB) -> re-extract")
-                rec.queued_at = time.monotonic(); rec.status = "pending"
-                await q.put((orig_url, 1, rec))
-            else:
-                with lock: fail_count += 1
-                failed_urls.append(orig_url)
-                rec.status = "fail"; rec.error = msg
-                print(f"  [fail] {filename}: {msg}")
-                mark_done()
-
-            with lock: dls_active -= 1
+                if ok:
+                    with lock: ok_count += 1
+                    spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
+                    print(f"  [ok] {filename}{spd}")
+                    rec.status = "ok"; mark_done()
+                elif msg == "stall_killed":
+                    new_kc = kc + 1; kill_counts[orig_url] = new_kc
+                    print(f"  [kill#{new_kc}] {filename}  ({bytes_done//(1<<20)}MB) -> re-extract")
+                    rec.queued_at = time.monotonic(); rec.status = "pending"
+                    if not fatal_control.is_set():
+                        await q.put((orig_url, 1, rec))
+                elif msg == "aborted_disk_full":
+                    rec.status = "aborted"
+                else:
+                    with lock: fail_count += 1
+                    failed_urls.append(orig_url)
+                    rec.status = "fail"; rec.error = msg
+                    if msg != "disk_full":
+                        print(f"  [fail] {filename}: {msg}")
+                    mark_done()
+            finally:
+                with lock: dls_active -= 1
 
     async def browser_worker(get_browser, wid):
         nonlocal ok_count, fail_count
-        while True:
+        while not fatal_control.is_set():
             if all_done.is_set() and q.empty(): break
             try:
                 url, attempt, rec = await asyncio.wait_for(q.get(), timeout=1.0)
             except asyncio.TimeoutError: continue
+            if fatal_control.is_set():
+                rec.status = "aborted"
+                q.task_done()
+                break
 
             rec.worker_id = wid
             t_start = time.monotonic()
@@ -187,6 +206,10 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                     # reaches for a window if /go refuses it.
                     link = await extract_fuckingfast(url, get_browser)
                     rec.extract_s = time.monotonic() - t_start
+                    if fatal_control.is_set():
+                        rec.status = "aborted"
+                        q.task_done()
+                        break
                     if not link:
                         print("  [fail] No link found")
                     else:
@@ -205,6 +228,10 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                     # the persistent lane pool internally.
                     proxy_url, cookies = await extract_datanodes(await get_browser(), url)
                     rec.extract_s = time.monotonic() - t_start
+                    if fatal_control.is_set():
+                        rec.status = "aborted"
+                        q.task_done()
+                        break
                     if not proxy_url:
                         print("  [fail] No URL extracted")
                     else:
@@ -225,15 +252,25 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             except Exception as e:
                 print(f"  [error] {e}")
 
-            if not success and not unsupported and not is_re and attempt < max_retries:
+            if fatal_control.is_set():
+                rec.status = "aborted"
+                q.task_done()
+                break
+
+            if (not success and not unsupported and not is_re and attempt < max_retries
+                    and not fatal_control.is_set()):
                 backoff = min(2**(attempt-1), 6)
                 print(f"  [retry in {backoff}s]")
                 await asyncio.sleep(backoff)
+                if fatal_control.is_set():
+                    rec.status = "aborted"
+                    q.task_done()
+                    break
                 rec.queued_at = time.monotonic()
                 await q.put((url, attempt+1, rec))
                 q.task_done(); continue
 
-            if not success and not is_re:
+            if not success and not is_re and not fatal_control.is_set():
                 with lock: fail_count += 1
                 failed_urls.append(url)
                 rec.status = "fail"; mark_done()
@@ -262,33 +299,48 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         await gate.aclose()
 
     async with tasks_lock:
-        stragglers = [t for t in all_tasks if not t.done()]
+        recorded_tasks = list(all_tasks)
+    stragglers = [t for t in recorded_tasks if not t.done()]
     if stragglers:
         print(f"  [wait] {len(stragglers)} downloads still finishing...")
-        await asyncio.gather(*stragglers, return_exceptions=True)
+    if recorded_tasks:
+        await asyncio.gather(*recorded_tasks, return_exceptions=True)
 
     stop_progress.set()
+    await progress_t
     await _close_sess()
     await close_ff_session()
     await _PROXY_POOL.close_all()
     telem.finish()
 
     base = os.path.dirname(os.path.abspath(__file__))
-    lp, jp = telem.save(base)
+    try:
+        lp, jp = telem.save(base)
+        print(f"Log: {os.path.basename(lp)}")
+    except (OSError, TypeError) as e:
+        # Report persistence is independent of the fatal download state.
+        print(f"[warn] Log save error: {e}")
 
     el = time.monotonic() - t0
     total_bytes = sum(b for _, b in bytes_acc)
+    disk_full = fatal_control.disk_full
     print(f"\n{'='*60}")
-    print(f"Done in {int(el//60)}m {int(el%60)}s  |  "
-          f"ok={ok_count}  fail={fail_count}  |  "
-          f"{total_bytes/1e9:.2f} GB  @  {total_bytes/el/1e6:.1f} MB/s")
-    print(f"Log: {os.path.basename(lp)}")
+    if disk_full is not None:
+        print(f"Run stopped: disk full in {disk_full.folder}  |  "
+              f"ok={ok_count}  fail={fail_count}")
+    else:
+        print(f"Done in {int(el//60)}m {int(el%60)}s  |  "
+              f"ok={ok_count}  fail={fail_count}  |  "
+              f"{total_bytes/1e9:.2f} GB  @  {total_bytes/el/1e6:.1f} MB/s")
 
     if failed_urls:
         fp = os.path.join(base, "failed_links.txt")
-        with open(fp, "w", encoding="utf-8") as f:
-            f.write("\n".join(failed_urls) + "\n")
-        print(f"Failed ({len(failed_urls)}): {fp}")
+        try:
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write("\n".join(failed_urls) + "\n")
+            print(f"Failed ({len(failed_urls)}): {fp}")
+        except OSError as e:
+            print(f"[warn] Failed links save error: {e}")
 
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────
 def main():

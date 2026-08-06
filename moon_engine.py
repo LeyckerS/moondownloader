@@ -41,6 +41,7 @@ from moon_download import (
     _sanitize_filename,
     download_file,
     count_usable_proxies,
+    RunFatalControl,
 )
 
 # ── THEME ──────────────────────────────────────────────────────────────────────
@@ -161,70 +162,82 @@ class Engine:
 
     async def _do_dl(self, proxy_url, cookies, filename, orig_url, rec,
                      kill_counts, dl_sem, dest_folder, telem, mark_done_fn,
-                     failed_urls, q):
+                     failed_urls, q, fatal_control):
         async with dl_sem:
+            if fatal_control.is_set():
+                rec.status = "aborted"
+                return
             self._inc("_dls")
-            rec.dl_start = time.monotonic(); rec.status = "downloading"
-            self._track(rec)
-            dest = os.path.join(dest_folder, filename)
-
-            if os.path.exists(dest):
-                self._inc("_ok")
-                self.log(f"    ✓  Exists: {filename}", "ok")
-                rec.status="ok"; rec.dl_s=0.0
-                mark_done_fn(); self._inc("_dl_done"); self._inc("_dls",-1); return
-
-            kc       = kill_counts.get(orig_url, 0)
-            kill_evt = asyncio.Event()
-            with self._lock:
-                self._active_kill_events.add(kill_evt)
             try:
-                ok, msg, bytes_done = await download_file(
-                    proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc,
-                    telem=telem, on_event=self.log)
-            finally:
+                rec.dl_start = time.monotonic(); rec.status = "downloading"
+                self._track(rec)
+                dest = os.path.join(dest_folder, filename)
+
+                if os.path.exists(dest):
+                    self._inc("_ok")
+                    self.log(f"    ✓  Exists: {filename}", "ok")
+                    rec.status="ok"; rec.dl_s=0.0
+                    mark_done_fn(); self._inc("_dl_done"); return
+
+                kc       = kill_counts.get(orig_url, 0)
+                kill_evt = asyncio.Event()
                 with self._lock:
-                    self._active_kill_events.discard(kill_evt)
-            rec.dl_s = max(time.monotonic()-rec.dl_start, 0.001)
+                    self._active_kill_events.add(kill_evt)
+                try:
+                    ok, msg, bytes_done = await download_file(
+                        proxy_url, cookies, dest, rec, self._bytes_acc, kill_evt, kc,
+                        telem=telem, on_event=self.log, fatal_control=fatal_control)
+                finally:
+                    with self._lock:
+                        self._active_kill_events.discard(kill_evt)
+                rec.dl_s = max(time.monotonic()-rec.dl_start, 0.001)
 
-            if ok:
-                self._inc("_ok")
-                spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
-                self.log(f"    ✓  Saved: {filename}{spd}", "ok")
-                rec.status="ok"; mark_done_fn(); self._inc("_dl_done")
-            elif msg == "stall_killed" and self._get("_stop_flag"):
-                rec.status = "stopped"
-                self.log(f"    stop: {filename} interrupted; partial file kept", "warn")
-                mark_done_fn(); self._inc("_dl_done")
-            elif msg == "stall_killed":
-                done_mb = bytes_done//(1<<20)
-                new_kc = kc + 1; kill_counts[orig_url] = new_kc
-                self._inc("_kills"); rec.stall_kills += 1
-                if new_kc <= STALL_MAX_KILL:
-                    self.log(f"    ⚡  Kill #{new_kc}: {filename}  ({done_mb}MB) → re-extract", "kill")
+                if ok:
+                    self._inc("_ok")
+                    spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
+                    self.log(f"    ✓  Saved: {filename}{spd}", "ok")
+                    rec.status="ok"; mark_done_fn(); self._inc("_dl_done")
+                elif msg == "stall_killed" and self._get("_stop_flag"):
+                    rec.status = "stopped"
+                    self.log(f"    stop: {filename} interrupted; partial file kept", "warn")
+                    mark_done_fn(); self._inc("_dl_done")
+                elif msg == "aborted_disk_full":
+                    rec.status = "aborted"
+                elif msg == "stall_killed":
+                    done_mb = bytes_done//(1<<20)
+                    new_kc = kc + 1; kill_counts[orig_url] = new_kc
+                    self._inc("_kills"); rec.stall_kills += 1
+                    if new_kc <= STALL_MAX_KILL:
+                        self.log(f"    ⚡  Kill #{new_kc}: {filename}  ({done_mb}MB) → re-extract", "kill")
+                    else:
+                        self.log(f"    ⚡  Kill #{new_kc}: {filename}  ({done_mb}MB) → continue", "warn")
+                    rec.queued_at=time.monotonic(); rec.status="pending"
+                    if not fatal_control.is_set():
+                        await q.put((orig_url, 1, rec))
                 else:
-                    self.log(f"    ⚡  Kill #{new_kc}: {filename}  ({done_mb}MB) → continue", "warn")
-                rec.queued_at=time.monotonic(); rec.status="pending"
-                await q.put((orig_url, 1, rec))
-                self._inc("_dls",-1); return
-            else:
-                self._inc("_fail"); failed_urls.append(orig_url)
-                rec.status="fail"; rec.error=msg
-                self.log(f"    ✗  {filename}: {msg}", "fail")
-                mark_done_fn(); self._inc("_dl_done")
-
-            self._inc("_dls",-1)
+                    self._inc("_fail"); failed_urls.append(orig_url)
+                    rec.status="fail"; rec.error=msg
+                    if msg != "disk_full":
+                        self.log(f"    ✗  {filename}: {msg}", "fail")
+                    mark_done_fn(); self._inc("_dl_done")
+            finally:
+                self._inc("_dls",-1)
 
     async def _browser_worker(self, get_browser, wid, q, dl_sem, all_done, mark_done_fn,
                                kill_counts, all_tasks, tasks_lock,
-                               output_links, failed_urls, dest_folder, mode, max_retries, telem):
+                               output_links, failed_urls, dest_folder, mode, max_retries, telem,
+                               fatal_control):
         my_tasks = []
         try:
-            while not self._get("_stop_flag"):
+            while not self._get("_stop_flag") and not fatal_control.is_set():
                 if all_done.is_set() and q.empty(): break
                 try:
                     url, attempt, rec = await asyncio.wait_for(q.get(), timeout=1.0)
                 except asyncio.TimeoutError: continue
+                if fatal_control.is_set():
+                    rec.status = "aborted"
+                    q.task_done()
+                    break
 
                 rec.worker_id    = wid
                 t_start          = time.monotonic()
@@ -247,6 +260,10 @@ class Engine:
                         # reaches for a window if /go refuses it.
                         link = await extract_fuckingfast(url, get_browser)
                         rec.extract_s = time.monotonic()-t_start
+                        if fatal_control.is_set():
+                            rec.status = "aborted"
+                            q.task_done()
+                            break
                         if not link:
                             self.log("    ✗  No link found", "fail")
                         elif mode == "links":
@@ -258,7 +275,7 @@ class Engine:
                             async def _task(pu=link, fn=filename, ou=url, r=rec):
                                 await self._do_dl(pu, "", fn, ou, r, kill_counts,
                                                    dl_sem, dest_folder, telem, mark_done_fn,
-                                                   failed_urls, q)
+                                                   failed_urls, q, fatal_control)
                             t = asyncio.create_task(_task())
                             my_tasks.append(t)
                             async with tasks_lock: all_tasks.append(t)
@@ -272,6 +289,10 @@ class Engine:
                         # the persistent lane pool internally.
                         proxy_url, cookies = await extract_datanodes(await get_browser(), url)
                         rec.extract_s = time.monotonic()-t_start
+                        if fatal_control.is_set():
+                            rec.status = "aborted"
+                            q.task_done()
+                            break
                         if not proxy_url:
                             rec.notes.append("extraction failed")
                             self.log("    ✗  No URL extracted", "fail")
@@ -284,7 +305,7 @@ class Engine:
                             async def _task(pu=proxy_url, co=cookies, fn=filename, ou=url, r=rec):
                                 await self._do_dl(pu, co, fn, ou, r, kill_counts,
                                                    dl_sem, dest_folder, telem, mark_done_fn,
-                                                   failed_urls, q)
+                                                   failed_urls, q, fatal_control)
                             t = asyncio.create_task(_task())
                             my_tasks.append(t)
                             async with tasks_lock: all_tasks.append(t)
@@ -304,16 +325,25 @@ class Engine:
                     rec.notes.append(f"exception: {e}")
                     self.log(f"    ✗  {e}", "fail")
 
+                if fatal_control.is_set():
+                    rec.status = "aborted"
+                    q.task_done()
+                    break
+
                 if (not success and not unsupported and not is_re and attempt < max_retries
-                        and not self._get("_stop_flag")):
+                        and not self._get("_stop_flag") and not fatal_control.is_set()):
                     backoff = min(2**(attempt-1), 6)
                     self.log(f"    ↻  retry in {backoff}s", "warn")
                     await asyncio.sleep(backoff)
+                    if fatal_control.is_set():
+                        rec.status = "aborted"
+                        q.task_done()
+                        break
                     rec.queued_at = time.monotonic()
                     await q.put((url, attempt+1, rec))
                     q.task_done(); continue
 
-                if not success and not is_re:
+                if not success and not is_re and not fatal_control.is_set():
                     self._inc("_fail"); failed_urls.append(url)
                     rec.status="fail"; mark_done_fn()
 
@@ -333,6 +363,7 @@ class Engine:
         all_tasks    : list      = []
         tasks_lock   = asyncio.Lock()
         kill_counts  : dict[str,int] = {}
+        fatal_control = RunFatalControl()
         dest_folder  = self._cfg["out_folder"]
         mode         = self._cfg["mode"]
         n_done       = 0
@@ -368,7 +399,10 @@ class Engine:
                 with self._lock:
                     b, d, ok, fail = self._browsers, self._dls, self._ok, self._fail
                 telem.snap(b, d, q.qsize(), ok, fail)
-                await asyncio.sleep(1.0)
+                try:
+                    await asyncio.wait_for(snap_stop.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
 
         # Kept in a local: a task with no reference can be collected mid-run.
         snap_t = asyncio.create_task(snap_task())  # noqa: F841
@@ -392,7 +426,8 @@ class Engine:
             await self._browser_worker(
                 gate.get, wid, q, dl_sem, all_done, mark_done,
                 kill_counts, all_tasks, tasks_lock,
-                output_links, failed_urls, dest_folder, mode, max_retries, telem)
+                output_links, failed_urls, dest_folder, mode, max_retries, telem,
+                fatal_control)
 
         try:
             worker_results = await asyncio.gather(
@@ -414,6 +449,7 @@ class Engine:
             await asyncio.gather(*stragglers, return_exceptions=True)
 
         snap_stop.set()
+        await snap_t
         await _close_sess()
         await close_ff_session()
         await _PROXY_POOL.close_all()
@@ -430,18 +466,29 @@ class Engine:
             # downloads already completed; a report-write failure shouldn't crash finalize.
             self.log(f"⚠  Log save error: {e}", "warn")
 
-        if output_links and mode == "links":
+        if output_links and mode == "links" and not fatal_control.is_set():
             with open(os.path.join(base,"output_links.txt"),"w",encoding="utf-8") as f:
                 f.write("\n".join(output_links)+"\n")
             self.log("✓  Links → output_links.txt", "info")
         if failed_urls:
-            with open(os.path.join(base,"failed_links.txt"),"w",encoding="utf-8") as f:
-                f.write("\n".join(failed_urls)+"\n")
-            self.log(f"⚠  {len(failed_urls)} failed → failed_links.txt", "warn")
+            try:
+                with open(os.path.join(base,"failed_links.txt"),"w",encoding="utf-8") as f:
+                    f.write("\n".join(failed_urls)+"\n")
+                self.log(f"⚠  {len(failed_urls)} failed → failed_links.txt", "warn")
+            except OSError as e:
+                self.log(f"⚠  Failed links save error: {e}", "warn")
 
         el = time.monotonic()-t0; m, s = divmod(int(el), 60)
         with self._lock: ok, fail, kills = self._ok, self._fail, self._kills
-        self.log(f"\n✓  Done in {m}m {s}s  ·  ✓ {ok}  ✗ {fail}  ⚡ {kills} kills", "ok")
+        disk_full = fatal_control.disk_full
+        if disk_full is not None:
+            self.log(
+                f"\nRun stopped: disk full in {disk_full.folder} after {m}m {s}s  ·  "
+                f"✓ {ok}  ✗ {fail}",
+                "fail",
+            )
+        else:
+            self.log(f"\n✓  Done in {m}m {s}s  ·  ✓ {ok}  ✗ {fail}  ⚡ {kills} kills", "ok")
         self._on_done()
 
     def _on_done(self):
@@ -472,6 +519,7 @@ class Engine:
         "pending":     "queue",
         "extracting":  "extract",
         "downloading": "download",
+        "aborted":     "queue",
         "ok":          "ok",
         "fail":        "fail",
         # A user-initiated stop is not a failure: the partial .tmp is kept and the
@@ -690,6 +738,8 @@ class Engine:
         # so the engine ships numbers and a stage name instead of prose.
         if not running and state == "idle":
             stage = "idle"
+        elif not running and state == "done":
+            stage = "done"
         elif url_done < url_tot:
             stage = "extracting"
         elif dl_done < dl_tot:
