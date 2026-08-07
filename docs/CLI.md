@@ -114,11 +114,12 @@ causes the shared Chrome instance to start; it is not one browser per worker.
 
 ## Exit codes
 
-| Code | Current behavior |
+| Code | Meaning |
 |:--:|:--|
-| `0` | The CLI completes normally, including a run in which individual URLs fail, or is interrupted with `Ctrl+C`. Inspect the final `ok` and `fail` counts and `failed_links.txt` when it is written. |
-| `1` | The URL file is missing or has no usable URLs, or an unhandled exception reaches `main()`. In the latter case the CLI writes `crash_log.txt` beside `moon_cli.py`. |
-| `2` | `argparse` rejects command-line usage, such as missing required arguments or a non-integer value for an integer argument. |
+| `0` | **Success** — Every file in the batch completed successfully. |
+| `1` | **Partial failure / Interrupted** — The run completed but at least one file failed (dead link, exhausted retries, etc.), OR the run aborted completely (e.g. `ENOSPC` disk full) before the batch finished, OR the run was interrupted via `Ctrl+C`, OR an unhandled runtime exception occurred (`crash_log.txt` written). |
+| `2` | **Pre-flight error** — The run could not start due to invalid usage (e.g. `argparse` missing arguments), the `--urls` file not being found, or the file containing no usable URLs. |
+| `3` | **Total failure** — The run completed but every single URL attempted failed. |
 
 After a normal run, the CLI writes `moontech_cli_*.log` and `moontech_cli_*.json`
 beside `moon_cli.py`, not inside `--output`. If any URL exhausts its attempts, it
