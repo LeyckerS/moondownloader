@@ -3,6 +3,7 @@
 Network, extraction and Chrome are stubbed at the moon_extract level: what is
 under test is the dispatcher's decision to launch, not the extractors.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +54,7 @@ def run_cli(urls, retries=1) -> dict:
     with tempfile.TemporaryDirectory() as out:
         asyncio.run(moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"))
         done = len(os.listdir(out))
-    return {"ok": len(urls) if done == 0 else done, "fail": 0}
+    return {"ok": done, "fail": len(urls) - done}
 
 
 def assert_browser_counts(result, calls, urls, want_browsers: int) -> None:
