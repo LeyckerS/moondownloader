@@ -1,4 +1,5 @@
 """Shared pytest fixtures for no-Chrome regression tests."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,10 +15,14 @@ import moon_cli  # noqa: E402
 import moon_engine  # noqa: E402
 import moon_extract  # noqa: E402
 
-
 @pytest.fixture
 def browser_calls(monkeypatch):
-    calls = {"playwright": 0, "open_browser": 0, "close_browser": 0, "shutdown_chrome": 0}
+    calls = {
+        "playwright": 0,
+        "open_browser": 0,
+        "close_browser": 0,
+        "shutdown_chrome": 0,
+    }
 
     async def fake_ff(url, get_browser=None):
         await asyncio.sleep(0.01)
@@ -61,7 +66,12 @@ def browser_calls(monkeypatch):
     for host in (moon_engine, moon_cli):
         monkeypatch.setattr(host, "extract_fuckingfast", fake_ff)
         monkeypatch.setattr(host, "extract_datanodes", fake_dn)
-        monkeypatch.setattr(host, "close_ff_session", lambda: asyncio.sleep(0))
+        monkeypatch.setattr(
+            host,
+            "close_ff_session",
+            lambda: asyncio.sleep(0),
+        )
+
     monkeypatch.setattr(moon_cli, "download_file", fake_download)
 
     return calls

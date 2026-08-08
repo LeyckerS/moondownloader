@@ -108,4 +108,4 @@ jobs:
         run: pip install "aiohttp>=3.9,<4" "curl_cffi>=0.7,<1" "pytest==8.*"
 
       - name: A fuckingfast batch must not open a browser
-        run: pytest tests/ -q
+        run: python -m pytest tests/ -q
