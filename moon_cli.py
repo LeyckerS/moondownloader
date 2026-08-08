@@ -228,7 +228,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                             await do_dl(pu, "", fn, ou, r)
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
-                        progress.mark_extraction(True)
+                        progress.mark_extraction(url, True)
                         success = True
                 elif DATANODES_HOST in parsed.netloc:
                     # API key set -> single JSON GET, no browser, no captcha.
@@ -251,7 +251,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                             await do_dl(pu, co, fn, ou, r)
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
-                        progress.mark_extraction(True)
+                        progress.mark_extraction(url, True)
                         success = True
                 else:
                     host = parsed.hostname or parsed.netloc or "(missing host)"
@@ -285,7 +285,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             if not success and not is_re and not fatal_control.is_set():
                 failed_urls.append(url)
                 rec.status = "fail"
-                if progress.mark_extraction(False):
+                if progress.mark_extraction(url, False):
                     all_done.set()
 
             q.task_done()

@@ -24,8 +24,8 @@ def test_cli_progress_line_switches_to_downloading_after_extraction():
     engine = Engine()
     engine.begin_external_progress(2)
     try:
-        engine.mark_extraction(True)
-        engine.mark_extraction(True)
+        engine.mark_extraction("https://example.test/one", True)
+        engine.mark_extraction("https://example.test/two", True)
         engine.mark_download_start()
         now = time.monotonic()
         engine.progress_bytes().extend([(now - 0.2, 1_000_000), (now - 0.1, 1_000_000)])
@@ -35,5 +35,20 @@ def test_cli_progress_line_switches_to_downloading_after_extraction():
         assert "downloading 0/2" in line
         assert "MB/s" in line or "KB/s" in line
         assert snapshot["metrics"]["speed_mbs"] > 0
+    finally:
+        engine.finish_external_progress()
+
+
+def test_external_progress_counts_re_extraction_once():
+    engine = Engine()
+    url = "https://example.test/retried"
+    engine.begin_external_progress(1)
+    try:
+        engine.mark_extraction(url, True)
+        engine.mark_extraction(url, True)
+
+        metrics = engine.snapshot()["metrics"]
+        assert metrics["extract_done"] == 1
+        assert metrics["extract_total"] == 1
     finally:
         engine.finish_external_progress()
