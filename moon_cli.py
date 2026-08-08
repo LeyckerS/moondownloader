@@ -359,7 +359,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         except OSError as e:
             print(f"[warn] Failed links save error: {e}")
 
-    return ok_count, fail_count, disk_full is not None
+    return metrics["ok"], metrics["fail"], disk_full is not None
 
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────
 def main():
