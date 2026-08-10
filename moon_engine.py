@@ -805,7 +805,6 @@ class Engine:
         if now - self._last_proxy_check < 2.0:
             return
         self._last_proxy_check = now
-
         # 1. Handle missing file
         if not os.path.exists(self.proxy_path):
             self._proxy_mtime = 0.0
