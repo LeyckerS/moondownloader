@@ -27,11 +27,11 @@ DOWNLOAD_DEFS = (
 )
 
 
-def run_engine(engine, urls, retries=1) -> dict:
+def run_engine(engine, urls, retries=1, mode="links") -> dict:
     res = engine.start(
         {
             "links": urls,
-            "mode": "links",
+            "mode": mode,
             "out_folder": str(ROOT / "_tmp_out"),
             "workers": 4,
             "dl_streams": 4,
@@ -45,7 +45,7 @@ def run_engine(engine, urls, retries=1) -> dict:
         time.sleep(0.15)
 
     metrics = engine.snapshot(0)["metrics"]
-    return {"ok": metrics["ok"], "fail": metrics["fail"]}
+    return {"ok": metrics["ok"], "fail": metrics["fail"], "dl_done": metrics["dl_done"]}
 
 
 def run_cli(urls, retries=1) -> None:
@@ -95,6 +95,20 @@ def test_engine_mixed_batch_launches_one_shared_browser(browser_calls):
         cleanup()
 
 
+def test_engine_download_mode_uses_stubbed_download_file(browser_calls):
+    # moon_engine imports download_file straight from moon_download, a
+    # separate name from moon_cli's. If the fixture only patches moon_cli's
+    # copy, this hits the real downloader against a fake URL instead of the
+    # stub -- see #160.
+    engine = moon_engine.Engine()
+    try:
+        result = run_engine(engine, FF, mode="download")
+        assert result == {"ok": len(FF), "fail": 0, "dl_done": len(FF)}
+        assert_browser_counts(browser_calls, want_browsers=0)
+    finally:
+        cleanup()
+
+
 def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
     engine = moon_engine.Engine()
 
@@ -104,7 +118,7 @@ def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
         messages = [message for message, _tag in snapshot["log"]]
         record = engine._tracked[UNSUPPORTED[0]]
 
-        assert result == {"ok": 0, "fail": 1}
+        assert result == {"ok": 0, "fail": 1, "dl_done": 0}
         assert browser_calls["open_browser"] == 0
         assert browser_calls["playwright"] == 0
         assert record.status == "fail"

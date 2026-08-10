@@ -58,10 +58,13 @@ def browser_calls(monkeypatch):
     monkeypatch.setattr(moon_extract, "close_browser", fake_close_browser)
     monkeypatch.setattr(moon_extract, "shutdown_chrome", fake_shutdown_chrome)
 
+    # Both front-ends import their own copy of each of these names, so both
+    # must be patched here -- patching only one leaves the other holding the
+    # real implementation, invisibly, until something exercises it.
     for host in (moon_engine, moon_cli):
         monkeypatch.setattr(host, "extract_fuckingfast", fake_ff)
         monkeypatch.setattr(host, "extract_datanodes", fake_dn)
         monkeypatch.setattr(host, "close_ff_session", lambda: asyncio.sleep(0))
-    monkeypatch.setattr(moon_cli, "download_file", fake_download)
+        monkeypatch.setattr(host, "download_file", fake_download)
 
     return calls
