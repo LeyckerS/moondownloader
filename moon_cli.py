@@ -342,6 +342,8 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         except OSError as e:
             print(f"[warn] Failed links save error: {e}")
 
+    return ok_count, fail_count, disk_full is not None
+
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser(
@@ -368,13 +370,13 @@ def main():
         n_extractors = 8
 
     if not os.path.exists(args.urls):
-        print(f"ERROR: urls file not found: {args.urls}"); sys.exit(1)
+        print(f"ERROR: urls file not found: {args.urls}"); sys.exit(2)
 
     with open(args.urls, encoding="utf-8", errors="replace") as f:
         urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
 
     if not urls:
-        print("ERROR: no URLs found in file"); sys.exit(1)
+        print("ERROR: no URLs found in file"); sys.exit(2)
 
     print(f"Loaded {len(urls)} URLs from {args.urls}")
 
@@ -382,10 +384,19 @@ def main():
     proxy_path = args.proxies if args.proxies is not None else "proxies.txt"
 
     try:
-        asyncio.run(run(urls, args.output, n_extractors, args.streams,
+        ok, fail, aborted = asyncio.run(run(urls, args.output, n_extractors, args.streams,
                         args.retries, proxy_path, is_default_proxies))
+        if aborted:
+            sys.exit(1)
+        elif ok == 0 and fail > 0:
+            sys.exit(3)
+        elif fail > 0:
+            sys.exit(1)
+        else:
+            sys.exit(0)
     except KeyboardInterrupt:
         print("\nInterrupted.")
+        sys.exit(1)
     except Exception:
         # Catch unexpected top-level CLI exceptions to log crash traceback and exit cleanly
         crash = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash_log.txt")

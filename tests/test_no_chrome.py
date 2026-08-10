@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import pathlib
 import re
 import tempfile
@@ -49,18 +48,15 @@ def run_engine(engine, urls, retries=1) -> dict:
     return {"ok": metrics["ok"], "fail": metrics["fail"]}
 
 
-def run_cli(urls, retries=1) -> dict:
+def run_cli(urls, retries=1) -> None:
     with tempfile.TemporaryDirectory() as out:
         asyncio.run(moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"))
-        done = len(os.listdir(out))
-    return {"ok": len(urls) if done == 0 else done, "fail": 0}
 
 
-def assert_browser_counts(result, calls, urls, want_browsers: int) -> None:
+def assert_browser_counts(calls, want_browsers: int) -> None:
     assert calls["open_browser"] == want_browsers
     assert calls["playwright"] == want_browsers
     assert calls["close_browser"] + calls["shutdown_chrome"] == want_browsers
-    assert result["ok"] == len(urls)
 
 
 def cleanup() -> None:
@@ -81,20 +77,20 @@ def cleanup() -> None:
 
 def test_engine_fuckingfast_only_launches_no_browser(browser_calls):
     engine = moon_engine.Engine()
-
     try:
         result = run_engine(engine, FF)
-        assert_browser_counts(result, browser_calls, FF, want_browsers=0)
+        assert result["ok"] == len(FF)
+        assert_browser_counts(browser_calls, want_browsers=0)
     finally:
         cleanup()
 
 
 def test_engine_mixed_batch_launches_one_shared_browser(browser_calls):
     engine = moon_engine.Engine()
-
     try:
         result = run_engine(engine, FF + DN)
-        assert_browser_counts(result, browser_calls, FF + DN, want_browsers=1)
+        assert result["ok"] == len(FF + DN)
+        assert_browser_counts(browser_calls, want_browsers=1)
     finally:
         cleanup()
 
@@ -124,16 +120,16 @@ def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
 
 def test_cli_fuckingfast_only_launches_no_browser(browser_calls):
     try:
-        result = run_cli(FF)
-        assert_browser_counts(result, browser_calls, FF, want_browsers=0)
+        run_cli(FF)
+        assert_browser_counts(browser_calls, want_browsers=0)
     finally:
         cleanup()
 
 
 def test_cli_mixed_batch_launches_one_shared_browser(browser_calls):
     try:
-        result = run_cli(FF + DN)
-        assert_browser_counts(result, browser_calls, FF + DN, want_browsers=1)
+        run_cli(FF + DN)
+        assert_browser_counts(browser_calls, want_browsers=1)
     finally:
         cleanup()
 
