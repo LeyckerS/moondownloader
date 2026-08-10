@@ -716,23 +716,56 @@ class Engine:
                 self._proxy_status = "none_configured"
             else:
                 self._proxy_status = "empty_file"
-
         now = time.monotonic()
-        recent = [(t, b) for t, b in snap if t > now - 3.0]
-        if len(recent) > 1:
-            span = max(min(3.0,now - t0),0.05)
-            mbs = sum(b for _, b in recent) / span / 1_048_576
+        # 1. Live Speed (3-second window for UI display)
+        recent_live = [(t, b) for t, b in snap if t > now - 3.0]
+        if len(recent_live) > 1:
+            span_live = max(min(3.0, now - self._t0), 0.05)
+            mbs = sum(b for _, b in recent_live) / span_live / 1_048_576
         else:
             mbs = 0.0
-
+        # 2. Calculate smoothed eta rate
+        recent_eta = [(t, b) for t, b in snap if t > now - 10.0]
+        if len(recent_eta) > 1:
+            t_start = recent_eta[0][0] # Timestamp of the oldest sample
+            span_eta = max(min(10.0, now - self._t0), 0.05)
+            mbs_eta = sum(b for _, b in recent_eta) / span_eta / 1_048_576
+        else:
+            mbs_eta = 0.0
         total_downloaded = sum(b for _, b in snap)
         files_remaining  = dl_tot - dl_done
-        if mbs > 0.1 and files_remaining > 0 and dl_done > 0:
-            avg_file = total_downloaded / dl_done
-            eta = min(files_remaining * avg_file / (mbs * 1_048_576), 7200)
-        else:
-            eta = 0.0
+        if mbs_eta > 0.1 and files_remaining > 0:
+            # calculate average file size
+            avg_file = 0
+            known_counter = 0
+            for record in self._tracked.values():
+                if record.file_bytes > 0: # if we know the amount of total bytes the download will take
+                    avg_file += record.file_bytes
+                    known_counter += 1
+            try:
+                avg_file = avg_file / known_counter
+            except ZeroDivisionError:
+                avg_file = 0
 
+            dl_size_left = 0
+            for record in self._tracked.values():
+                if record.status in ("ok", "fail", "aborted", "stopped"):
+                    continue
+    
+                if record.file_bytes > 0:
+                    dl_size_left += (record.file_bytes - record.done_bytes)
+                else:
+                    dl_size_left += avg_file
+
+            # to make it to mb
+            dl_size_left = dl_size_left / 1_048_576
+            raw_eta = dl_size_left / mbs_eta
+            if raw_eta >= 7200:
+                eta = None
+            else:
+                eta = raw_eta
+        else:
+            eta = None
         el = (t_end - t0) if t_end else ((now - t0) if t0 else 0.0)
         # No phase sentence here on purpose: the GUI owns wording and language,
         # so the engine ships numbers and a stage name instead of prose.
@@ -759,7 +792,7 @@ class Engine:
                 "speed_mbs": round(mbs, 3),
                 "dl_done": dl_done, "dl_total": dl_tot,
                 "ok": ok, "fail": fail, "kills": kills,
-                "eta_s": round(eta, 1),
+                "eta_s": round(eta, 1) if eta is not None else None,
                 "bytes_total": total_downloaded,
                 "extract_done": url_done, "extract_total": url_tot,
                 "active": dls, "stage": stage, "elapsed_s": round(el, 1),
