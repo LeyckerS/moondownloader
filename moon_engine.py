@@ -712,7 +712,6 @@ class Engine:
         # 2. Calculate smoothed eta rate
         recent_eta = [(t, b) for t, b in snap if t > now - 10.0]
         if len(recent_eta) > 1:
-            t_start = recent_eta[0][0] # Timestamp of the oldest sample
             span_eta = max(min(10.0, now - self._t0), 0.05)
             mbs_eta = sum(b for _, b in recent_eta) / span_eta / 1_048_576
         else:
