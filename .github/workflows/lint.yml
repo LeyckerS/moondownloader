@@ -7,6 +7,8 @@ on:
       - "**.py"
       - "requirements.txt"
       - "constraints.txt"
+      - "ruff.toml"
+      - "pytest.ini"
       - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
   pull_request:
@@ -14,6 +16,8 @@ on:
       - "**.py"
       - "requirements.txt"
       - "constraints.txt"
+      - "ruff.toml"
+      - "pytest.ini"
       - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
 
