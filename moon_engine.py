@@ -735,7 +735,7 @@ class Engine:
             for record in self._tracked.values():
                 if record.status in ("ok", "fail", "aborted", "stopped"):
                     continue
-    
+
                 if record.file_bytes > 0:
                     dl_size_left += (record.file_bytes - record.done_bytes)
                 else:
