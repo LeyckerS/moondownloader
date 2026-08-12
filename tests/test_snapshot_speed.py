@@ -27,7 +27,7 @@ def test_snapshot_eta_ignores_terminal_states():
     now = time.time()
     e = Engine()
 
-    # 1. Fake some overall progress and recent speed. 
+    # 1. Fake some overall progress and recent speed.
     # ensures the engine doesn't just return None (because speed = 0 -> Simulating ~2 MB/s here)
     e._dl_total = 2
     e._dl_done = 0
