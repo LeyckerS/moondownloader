@@ -13,6 +13,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The two files that control what CI checks were the two files CI did not
+  watch.** `ruff.toml` and `pytest.ini` matched no workflow's `paths` filter, so
+  a pull request touching only one of them ran no jobs at all — a rule could
+  have been added to ruff's ignore list, or the warning filter broadened to hide
+  every deprecation, and the checks would have stayed green and silent. Both are
+  now in the filter. Verified on `main` with a commit touching `ruff.toml` alone:
+  `Lint` fires, `Docs CLI Check` correctly does not. Thanks to
+  [@nightcityblade](https://github.com/nightcityblade) (#164, #165).
+
+## [4.1] — 2026-08-12
+
+A maintenance release, and the first one written entirely by other people: every
+entry below came from an outside contributor. Two are bugs you can hit in normal
+use — a full disk, and the Stop button — and the rest make the project harder to
+break by accident.
+
+### Added
+- **`moon_cli.py` reports the run's outcome in its exit code.** It previously
+  exited 0 whenever the run completed, whether one file failed or all of them
+  did, and 0 on Ctrl-C, so a script had no way to tell success from total
+  failure. The codes are `0` every file succeeded, `1` some failed (also a run
+  stopped by a full disk, and an interrupt), `3` every URL failed, and `2` a
+  pre-flight problem that stopped the run from starting. Documented in
+  `docs/CLI.md` and covered by `tests/test_cli_exit_codes.py`.
+  Thanks to [@AdvaitVarhade](https://github.com/AdvaitVarhade) (#32, #153).
+
+### Changed
+- **The two pre-flight errors in `moon_cli.py` moved from exit code 1 to 2** — a
+  missing `--urls` file, and a file containing no URLs. This matches argparse,
+  which already exits 2 on a usage error. Scripts testing for a non-zero status
+  are unaffected; one testing for `1` specifically needs updating (#153).
+- **`pytest.ini`**, the project's first pytest configuration, carrying one
+  narrowly-matched `filterwarnings` entry for the `aiohttp.BasicAuth`
+  deprecation. The call itself has to stay — `proxy_auth` accepts nothing else,
+  and moving the credentials into a header breaks HTTPS proxies, which aiohttp
+  authenticates on the `CONNECT` request rather than inside the tunnel. The
+  filter matches that one message rather than the category, so an unrelated
+  deprecation is still reported. Thanks to
+  [@Divesh-Kshirsagar](https://github.com/Divesh-Kshirsagar) (#151, #161).
+
+### Fixed
+- **A full destination disk no longer burns bandwidth it cannot write.** `ENOSPC`
+  was caught by the same catch-all that handles ordinary transfer errors, so the
+  queue kept going and the retry machinery kept re-fetching data that could never
+  land — measured on the run that opened the issue: 46 files, each downloading
+  for ~236s before failing, ~12 GB pulled and discarded, with nothing on screen
+  saying why. The first `ENOSPC` is now detected by `errno` and published as a
+  run-level fatal state; queue intake and retries stop, active transfers unwind
+  at their next write boundary, and the live log names the folder and the
+  shortfall. Interrupted files keep their `.tmp` and stay resumable, and only the
+  URL that triggered it is recorded as failed — files stopped as a consequence
+  are reported `aborted` rather than each being blamed individually. Writes loop
+  over a `memoryview`, because a short write on a nearly-full disk returns a
+  count instead of raising and would otherwise truncate the file silently.
+  Thanks to [@shard872](https://github.com/shard872) (#116, #150).
+- **Stop now interrupts downloads already in flight.** `Engine.stop()` set the
+  stop flag and closed Chrome, but a transfer that had already started ran to
+  completion — on a large file the button appeared to do nothing for minutes.
+  The engine keeps a registry of the kill event belonging to each active
+  download and signals them with `loop.call_soon_threadsafe(kill_evt.set)`,
+  which is what setting an `asyncio.Event` from the calling thread requires;
+  entries are discarded in a `finally:` so the set cannot grow over a long run.
+  A stop is reported as `stopped` rather than as a stall kill, so the retry path
+  no longer re-queues the file and undoes it. The partial `.tmp` is kept and
+  stays resumable, and `failed_links.txt` is not written for a run you ended
+  yourself. Thanks to [@Allen58562](https://github.com/Allen58562) (#65, #149).
+- **`ruff` ran five times per pull request**, once inside each Python version of
+  the byte-compile matrix, checking identical work every time — a linter's result
+  does not vary with the interpreter it is installed under, and `ruff.toml` sets
+  `target-version = "py310"` regardless. It is now a standalone job that runs
+  once. The `ruff==0.16.1` pin is unchanged, which is the point: an unpinned
+  linter turns unrelated pull requests red the day upstream adds a rule.
+  Thanks to [@nightcityblade](https://github.com/nightcityblade) (#81, #158).
+- **A test assertion that could not fail.** `assert result["ok"] == len(urls)`
+  was shared by four tests in `tests/test_no_chrome.py`. Through the two `run_cli`
+  callers `ok` was fabricated — the stubs write no files, so the helper
+  substituted `len(urls)` and the assertion compared a number with itself.
+  Through the two `run_engine` callers it is real, taken from the engine's own
+  counter. It is now asserted inline in the engine tests only. Thanks to
+  [@XEDAB](https://github.com/XEDAB) (#155, #157).
+- **The test suite could have made real network requests.** `tests/conftest.py`
+  stubbed `download_file` on `moon_cli` only — that line sat outside the loop
+  that patches both front-ends, so `moon_engine` kept the real function. Nothing
+  failed, because the engine tests run in link-extraction mode and never
+  download, so the suite's no-network promise was holding by accident. The stub
+  is now inside the loop. Thanks to [@XEDAB](https://github.com/XEDAB) (#160, #162).
+
 ### Removed
 - **The `THEME` colour palette at the top of `moon_engine.py`** — fifteen
   constants with no references anywhere. `moon_engine.py` was once *generated*
@@ -22,67 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   colours from CSS custom properties in `web/styles.css`, which shares not one
   hex value with the block. Thanks to
   [@AashishGupta2007](https://github.com/AashishGupta2007) (#145, #159).
-
-### Fixed
-- **`ruff` ran five times per pull request**, once inside each Python version of
-  the byte-compile matrix, checking identical work every time — the linter's
-  result does not vary with the interpreter it is installed under, and
-  `ruff.toml` sets `target-version = "py310"` regardless. It is now a standalone
-  job that runs once. The `ruff==0.16.1` pin is unchanged, which is the point:
-  an unpinned linter turns unrelated pull requests red the day upstream adds a
-  rule. Thanks to [@nightcityblade](https://github.com/nightcityblade) (#81, #158).
-- **A test assertion that could not fail.** `assert result["ok"] == len(urls)`
-  was shared by four tests in `tests/test_no_chrome.py`. Through the two `run_cli`
-  callers `ok` was fabricated — the stubs write no files, so `done == 0` and the
-  helper substituted `len(urls)`, comparing a number with itself. Through the two
-  `run_engine` callers it is real, taken from the engine's own counter. It is now
-  asserted inline in the engine tests only, so the vacuous half is gone and the
-  half that works still fails when the engine drops a URL. Thanks to
-  [@XEDAB](https://github.com/XEDAB) (#155, #157).
-
-### Added
-- **`moon_cli.py` now reports the run's outcome in its exit code.** It previously
-  exited 0 whenever the run completed, whether one file failed or all of them
-  did, and 0 on Ctrl-C — so a script had no way to tell success from total
-  failure. The codes are now `0` all files succeeded, `1` some failed (also a
-  run stopped by a full disk, and an interrupt), `3` every URL failed, and `2` a
-  pre-flight problem that stopped the run from starting. All four are documented
-  in `docs/CLI.md` and covered by `tests/test_cli_exit_codes.py`.
-  Thanks to [@AdvaitVarhade](https://github.com/AdvaitVarhade) (#32, #153).
-
-### Changed
-- **The two pre-flight errors in `moon_cli.py` moved from exit code 1 to 2** — a
-  missing `--urls` file and a file containing no URLs. This matches argparse,
-  which already exits 2 on a usage error, so the CLI is now consistent with its
-  own parser. Scripts testing for a non-zero status are unaffected; one testing
-  for `1` specifically will need updating (#153).
-
-### Fixed
-- **A full destination disk no longer burns bandwidth it cannot write.** `ENOSPC`
-  was caught by the same catch-all that handles ordinary transfer errors, so the
-  queue kept going and the retry machinery kept re-fetching data that could never
-  land — measured on the run that opened the issue: 46 files, each downloading
-  for ~236s before failing, ~12 GB pulled and discarded, with nothing on screen
-  saying why. The first `ENOSPC` is now detected by `errno` and published as a
-  run-level fatal state; new queue intake and retries stop, active transfers
-  unwind at their next write boundary, and the live log names the folder and the
-  shortfall. Interrupted files keep their `.tmp` and stay resumable, and only the
-  URL that triggered it is recorded as failed — files stopped as a consequence
-  are reported `aborted` rather than each being blamed individually. Writes now
-  loop over a `memoryview`, because a short write on a nearly-full disk returns a
-  count instead of raising and would otherwise truncate the file silently.
-  Thanks to [@shard872](https://github.com/shard872) (#116, #150).
-- **Stop now interrupts downloads already in flight.** `Engine.stop()` set the
-  stop flag and closed Chrome, but a transfer that had already started ran to
-  completion — on a large file the button appeared to do nothing for minutes.
-  The engine now keeps a registry of the kill event belonging to each active
-  download and signals them with `loop.call_soon_threadsafe(kill_evt.set)`,
-  which is what setting an `asyncio.Event` from the calling thread requires.
-  Entries are discarded in a `finally:` so the set cannot grow over a long run.
-  A stop is reported as `stopped` rather than as a stall kill, so the retry
-  path no longer re-queues the file and undoes the stop; the partial `.tmp` is
-  kept and stays resumable, and `failed_links.txt` is not written. Thanks to
-  [@Allen58562](https://github.com/Allen58562) (#65, #149).
 
 ## [4.0] — 2026-08-05
 

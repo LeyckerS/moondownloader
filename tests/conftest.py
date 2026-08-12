@@ -59,9 +59,14 @@ def browser_calls(monkeypatch):
     monkeypatch.setattr(moon_extract, "shutdown_chrome", fake_shutdown_chrome)
 
     for host in (moon_engine, moon_cli):
+        # Every stub in this loop must cover both moon_engine and moon_cli.
+        # Break that and the engine keeps the real function — it will actually
+        # try to make network requests, because monkeypatch never replaced its
+        # download_file. See #160: the loop is the only place any of this
+        # happens, precisely so one of them cannot be left out again.
         monkeypatch.setattr(host, "extract_fuckingfast", fake_ff)
         monkeypatch.setattr(host, "extract_datanodes", fake_dn)
         monkeypatch.setattr(host, "close_ff_session", lambda: asyncio.sleep(0))
-    monkeypatch.setattr(moon_cli, "download_file", fake_download)
+        monkeypatch.setattr(host, "download_file", fake_download)
 
     return calls
