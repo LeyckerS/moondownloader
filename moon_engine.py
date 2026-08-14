@@ -137,8 +137,6 @@ class Engine:
     def _get(self, attr):
         with self._lock: return getattr(self, attr)
 
-    _LOG_MAX_LINES = 2000
-
     def log(self, msg, tag=""):
         """Thread-safe: called from the asyncio worker, drained by snapshot()."""
         with self._log_lock:
