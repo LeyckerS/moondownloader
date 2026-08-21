@@ -430,6 +430,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
 
 .s-label { font-family: var(--mono); font-size: 0.68rem; color: var(--txt2); }
 .s-hint  { font-family: var(--mono); font-size: 0.58rem; color: var(--txt3); }
+.scope-note {
+  grid-column: 1 / -1;
+  margin-top: -0.15rem;
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  color: var(--txt3);
+}
 .slider output {
   font-family: var(--mono); font-size: 0.8rem; font-weight: 700;
   color: var(--accent); min-width: 2.6em; text-align: right;

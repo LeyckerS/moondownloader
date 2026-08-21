@@ -14,6 +14,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The `E501` comment in `ruff.toml` claimed line length was "handled above
+  via line-length".** It is not handled anywhere: with `E501` switched off the
+  `line-length` value is a setting nothing reads, and CI runs `ruff check`
+  only — `ruff format` appears in no workflow. The comment now says so.
+  Verified with the CI's own `ruff==0.16.1` pin: a 206-character line passes
+  the repo config untouched. Thanks to
+  [@FlaggedATX](https://github.com/FlaggedATX) (#79, #171).
+- **The `Extractors` slider implied a concurrency datanodes never gets.** It sits
+  under "COMMON — BOTH METHODS", but datanodes pages are capped by the `Pages`
+  setting (1–8), so setting 32 extractors bought nothing there — measured on the
+  run that opened the issue, fuckingfast kept ~40 of 48 download slots busy while
+  datanodes kept ~4. The control now carries a live note reading the effective
+  limit, `min(Extractors, Pages)`, updating from either slider and relabelled on
+  a language switch. The cap itself is deliberately unchanged: several identities
+  from one IP read as a bot farm to Turnstile. Thanks to
+  [@yhuikzdtguioaert](https://github.com/yhuikzdtguioaert) (#83, #169).
+
+### Added
+- **A regression test for the `download_file` stub**, which fails when the engine
+  reaches the real downloader instead of the fixture — the gap #162 closed had no
+  test behind it. `run_engine` also gained a `mode` parameter: the no-Chrome suite
+  had only ever exercised link extraction, which is why the missing stub went
+  unseen. Thanks to [@harshvardhan60792](https://github.com/harshvardhan60792) (#160, #170).
+
+### Removed
+- **`Engine._LOG_MAX_LINES`** — defined once and read nowhere. Another constant
+  left over from when `moon_engine.py` was generated from a tkinter GUI; the log
+  ring is bounded by `collections.deque(maxlen=6000)` instead. Thanks to
+  [@mazi-eth](https://github.com/mazi-eth) (#80, #167).
+
+### Fixed
+- **`docs-cli-check.yml` did not watch its own file on pull requests**, only on
+  push, so an edit to that workflow arrived with an empty check list. With #165
+  this completes the set: every configuration file that controls CI now triggers
+  the job it configures. Thanks to [@StefStrg](https://github.com/StefStrg) (#93, #168).
 - **The two files that control what CI checks were the two files CI did not
   watch.** `ruff.toml` and `pytest.ini` matched no workflow's `paths` filter, so
   a pull request touching only one of them ran no jobs at all — a rule could
