@@ -27,26 +27,23 @@ def test_snapshot_eta_ignores_terminal_states():
     now = time.monotonic()
     e = Engine()
 
-    # 1. Fake some overall progress and recent speed.
-    # ensures the engine doesn't just return None (because speed = 0 -> Simulating ~2 MB/s here)
-    e._dl_total = 2
-    e._dl_done = 0
+    # 1. Fake recent speed (~2 MB/s)
     e._bytes_acc.extend([(now - 9.0, 18_000_000), (now - 0.1, 200_000)])
 
-    # 2. Create a record that failed mid-download (90MB left)
+    # 2. Create a record that stopped mid-download (90MB left)
     terminal_rec = FileRecord(url='u1', filename='f1.bin')
     terminal_rec.file_bytes = 100_000_000
     terminal_rec.done_bytes = 10_000_000
     e._tracked['u1'] = terminal_rec
 
-    # 3. Test all terminal states -> ensure none of them generate a "ghost" ETA
+    # 3. Set total/done to 1 so no leftover untracked files are calculated
+    e._dl_total = 1
+    e._dl_done = 1
+
+    # 4. Test all terminal states -> ensure none generate a ghost ETA
     terminal_states = ("ok", "fail", "aborted", "stopped")
 
     for state in terminal_states:
         terminal_rec.status = state
-
-        # Trigger snapshot calculation
         eta = e.snapshot()['metrics']['eta_s']
-
-        # dl_size_left is 0 -> ETA should be 0 || None.
         assert eta in (0, None), f"Failed on state '{state}': Expected ETA to be 0 or None, got {eta}"
