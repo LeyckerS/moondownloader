@@ -688,6 +688,7 @@ class Engine:
             ok       = self._ok; fail = self._fail
             kills    = self._kills; dls = self._dls
             snap     = list(self._bytes_acc)
+            tracked_records = list(self._tracked.values())
 
         if not running:
             self._get_proxy_status()
@@ -720,7 +721,7 @@ class Engine:
             # calculate average file size
             avg_file = 0
             known_counter = 0
-            for record in self._tracked.values():
+            for record in tracked_records:
                 if record.file_bytes > 0: # if we know the amount of total bytes the download will take
                     avg_file += record.file_bytes
                     known_counter += 1
@@ -730,14 +731,21 @@ class Engine:
                 avg_file = 0
 
             dl_size_left = 0
-            for record in self._tracked.values():
+            tracked_active_count = 0
+            for record in tracked_records:
                 if record.status in ("ok", "fail", "aborted", "stopped"):
                     continue
 
+                tracked_active_count += 1
                 if record.file_bytes > 0:
                     dl_size_left += (record.file_bytes - record.done_bytes)
                 else:
                     dl_size_left += avg_file
+
+            # Add remaining queued files that haven't been picked up by workers yet
+            queued_files = files_remaining - tracked_active_count
+            if queued_files > 0:
+                dl_size_left += queued_files * avg_file
 
             # to make it to mb
             dl_size_left = dl_size_left / 1_048_576
@@ -802,6 +810,7 @@ class Engine:
         if now - self._last_proxy_check < 2.0:
             return
         self._last_proxy_check = now
+
         # 1. Handle missing file
         if not os.path.exists(self.proxy_path):
             self._proxy_mtime = 0.0
@@ -820,6 +829,7 @@ class Engine:
         # 3. Distinguish 0 valid proxies vs N valid proxies
         if self._proxies == 0:
             self._proxy_status = "empty_file"
+            
         else:
             self._proxy_status = "loaded"
         return

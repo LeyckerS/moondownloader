@@ -24,7 +24,7 @@ def test_snapshot_eta_ignores_terminal_states():
     Ensures files in terminal states ('ok', 'fail', 'aborted', 'stopped')
     dont contribute leftover bytes to ETA calculation.
     """
-    now = time.time()
+    now = time.monotonic()
     e = Engine()
 
     # 1. Fake some overall progress and recent speed.
