@@ -829,7 +829,7 @@ class Engine:
         # 3. Distinguish 0 valid proxies vs N valid proxies
         if self._proxies == 0:
             self._proxy_status = "empty_file"
-            
+
         else:
             self._proxy_status = "loaded"
         return
