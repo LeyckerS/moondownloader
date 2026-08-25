@@ -1,0 +1,27 @@
+name: Web Syntax Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/web-syntax.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/web-syntax.yml"
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Syntax check web/app.js
+        run: node --check web/app.js
