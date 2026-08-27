@@ -7,6 +7,8 @@ on:
       - "**.py"
       - "requirements.txt"
       - "constraints.txt"
+      - "ruff.toml"
+      - "pytest.ini"
       - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
   pull_request:
@@ -14,6 +16,8 @@ on:
       - "**.py"
       - "requirements.txt"
       - "constraints.txt"
+      - "ruff.toml"
+      - "pytest.ini"
       - ".github/dependabot.yml"
       - ".github/workflows/lint.yml"
 
@@ -35,6 +39,17 @@ jobs:
 
       - name: Byte-compile every module
         run: git ls-files '*.py' | xargs python -m compileall -q
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
 
       - name: Install ruff
         run: pip install "ruff==0.16.1"

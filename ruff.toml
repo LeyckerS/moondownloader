@@ -1,10 +1,13 @@
+# Changing this file runs the lint workflow: #165 added it to the paths filter,
+# so an edit here can no longer alter what CI enforces without CI noticing.
+
 line-length = 100
 target-version = "py310"
 
 [lint]
 select = ["E", "F", "W", "I"]
 ignore = [
-    "E501",  # line length - handled above via line-length instead
+    "E501",  # line length is not enforced: ruff format is not run in CI
     # Everything below fires on the codebase as it stands today. Per the issue that
     # introduced this file: the goal is a green baseline that catches regressions, not
     # a reformat, so these are parked here rather than fixed inline. Each is a real,

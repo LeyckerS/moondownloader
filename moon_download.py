@@ -22,7 +22,7 @@ import aiohttp
 from moon_extract import referer_for
 import moon_extract as _moon_extract
 
-VERSION = "v4.0"
+VERSION = "v4.1"
 
 DEFAULT_DL_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads", "datanodes")
 
@@ -638,7 +638,6 @@ async def download_file(
                         data = b"".join(buf)
                         if fatal_control.is_set():
                             return False, "aborted_disk_full", downloaded
-                        bytes_acc.append((time.monotonic(), len(data)))
                         last_write_bytes = len(data)
                         write_persisted_before = os.path.getsize(tmp)
                         await loop.run_in_executor(_POOL, _write, f, data)

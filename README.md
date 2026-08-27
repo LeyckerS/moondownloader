@@ -2,7 +2,7 @@
 
 # 🌙 Moon Downloader
 
-### **V4**
+### **V4.1**
 
 **Bulk file downloader** — real-Chrome extraction for datanodes.to, pure-HTTP extraction for fuckingfast.co, aiohttp streaming, and a GUI that runs on Edge WebView2.
 
@@ -15,7 +15,6 @@ Built with Python · Playwright · aiohttp · curl_cffi
 [![WebView2](https://img.shields.io/badge/GUI-Edge%20WebView2-0078D6?style=for-the-badge&logo=microsoftedge&logoColor=white)](https://developer.microsoft.com/microsoft-edge/webview2/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/LeyckerS/moondownloader/lint.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/LeyckerS/moondownloader/actions/workflows/lint.yml)
-[![Stars](https://img.shields.io/github/stars/LeyckerS/moondownloader?style=for-the-badge&logo=github&logoColor=white&color=E3B341)](https://github.com/LeyckerS/moondownloader/stargazers)
 [![CodeTriage](https://www.codetriage.com/leyckers/moondownloader/badges/users.svg)](https://www.codetriage.com/leyckers/moondownloader)
 
 ---
@@ -98,9 +97,30 @@ files done, 0 failed, no browser window opened. Method and instrumentation in
 
 ---
 
-## 🌗 What V4 is
+## 🌗 What V4.1 is
 
-**Both providers broke, and this is the repair.** The interface is unchanged since V3.
+**A maintenance release written entirely by other people** — every entry in its changelog came from
+an outside contributor. Two are bugs you can hit in normal use:
+
+- **A full destination disk stops the run.** `ENOSPC` used to be handled like any other transfer
+  error, so the queue kept going and the retry machinery kept re-fetching data that could never be
+  written — 46 files and roughly 12 GB pulled and discarded on the run that reported it, with nothing
+  on screen explaining why. It is now detected by `errno`, aborts the run, names the folder and the
+  shortfall in the live log, and leaves every `.tmp` resumable.
+- **Stop interrupts transfers already in flight.** It used to set a flag and close Chrome while an
+  in-progress download ran to completion, so on a large file the button appeared to do nothing for
+  minutes.
+
+The rest make the project harder to break by accident: structured CLI exit codes so a script can tell
+success from partial from total failure, a linter that runs once per pull request instead of five
+times, a test assertion that could never fail, and a test stub that left the engine able to reach the
+real network. Full detail and credits in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## 🌘 What V4 was
+
+**Both providers broke, and that release was the repair.** The interface is unchanged since V3.
 
 - **datanodes removed step 1.** The share URL used to return a form whose submit carried
   `name="method_free"`; it now answers with step 2 directly, tokens already minted, and says
@@ -109,7 +129,7 @@ files done, 0 failed, no browser window opened. Method and instrumentation in
 - **fuckingfast added Turnstile** to `POST /f/<id>/go`, so the pure-HTTP path returns 403 on its own.
 
 Both are fixed and measured: datanodes 5/5 end to end, fuckingfast 3/3 consecutive at 6.8–9.7s with
-auto-solve only, both together 4/4, 24 tests passing. The full account — including three defects
+auto-solve only, both together 4/4. The full account — including three defects
 introduced while building the fuckingfast path and caught in testing — is in
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -316,7 +336,19 @@ boundary, so it runs anywhere. Each issue says up front which it is.
 Claim one by commenting on it in your own words — no need to ask permission first. What gets a pull
 request merged, and what gets one sent back, is written out in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Everyone who has shipped a change is named in [AUTHORS.md](AUTHORS.md) with what they did.
+**How review works here**, so you know what to expect:
+
+- Every claim in a pull request description is checked against the function it describes, not taken
+  on trust. Where a review says something is wrong, it cites `file.py:line` and says whether it
+  blocks or is merely untidy.
+- Issue bodies are written by the maintainer and **have been wrong**. If the code disagrees with the
+  issue, the code wins — #63 was merged partly because it corrected the issue that opened it, and
+  corrections to a specification are made publicly on the thread where the mistake happened.
+- Keeping a diff to its issue matters more than its size. Reformatting and "while I was in there"
+  edits are the most common reason a pull request needs a second round.
+
+Everyone who has shipped a change is named in [AUTHORS.md](AUTHORS.md) with a line describing what
+they actually did, added in the same session as the merge.
 
 ---
 
@@ -365,8 +397,11 @@ python render_gui.py out/           # renders at 2554x1400 and 1440x900 + overfl
 python moon_engine.py          # headless engine: prints a snapshot and exits
 ```
 
-`tests/test_no_chrome.py` stubs Chrome and the network at the `moon_extract` boundary, so it needs no browser,
-no display and no Playwright install — it runs in CI on every push (`.github/workflows/lint.yml`).
+50 tests, and they need no browser, no display and no Playwright install: Chrome and the network are
+stubbed at the `moon_extract` boundary, so the suite runs anywhere. CI byte-compiles every tracked
+Python file on **3.10 through 3.14**, runs `ruff` against a pinned version, checks that every runtime
+dependency carries an upper bound, and runs the suite — on every push and every pull request
+(`.github/workflows/lint.yml`).
 
 ---
 

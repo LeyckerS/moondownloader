@@ -34,6 +34,7 @@ const I18N = {
     mode_download: "Download", mode_links: "Links only",
     common: "Common", common_sub: "· both methods",
     extractors: "Extractors", dl_streams: "DL streams", retries: "Retries",
+    extractors_hint: (n, pages) => `datanodes uses up to ${n} extractors (Pages ${pages})`,
     rec16: "rec. 16", rec8: "rec. 8", rec8p: "rec. 8",
     note_streams: "fewer streams = more bandwidth per file; the pipe is still the ceiling",
     dn_note: "Real Chrome + Turnstile: it opens pages, not windows",
@@ -87,6 +88,7 @@ const I18N = {
     mode_download: "Download", mode_links: "Solo link",
     common: "Comuni", common_sub: "· entrambi i metodi",
     extractors: "Extractors", dl_streams: "DL streams", retries: "Retries",
+    extractors_hint: (n, pages) => `datanodes usa fino a ${n} estrattori (Pages ${pages})`,
     rec16: "cons. 16", rec8: "cons. 8", rec8p: "cons. 8",
     note_streams: "pochi stream = piu banda per file; la pipe resta il tetto",
     dn_note: "Chrome reale + Turnstile: apre pagine, non finestre",
@@ -153,6 +155,7 @@ function applyLang(lang) {
   setRunState(ui.runState);
   editor.counts();
   syncDnChip();
+  syncExtractorScope();
   if (ui.lastMetrics) renderMetrics(ui.lastMetrics, true);
   if (ui.lastFiles) {
     // Row labels are only written when the state CHANGES, so a language switch
@@ -386,6 +389,16 @@ function initSlider(id, outId, suffix = "") {
   input.addEventListener("input", () => { paint(); scheduleSettingsSave(); });
   paint();
   return input;
+}
+
+function syncExtractorScope() {
+  const hint = $("#extractorScope");
+  const workers = $("#workers");
+  const pages = $("#pages");
+  if (!hint || !workers || !pages) return;
+  const workerCount = Number(workers.value);
+  const pageCount = Number(pages.value);
+  hint.textContent = T("extractors_hint", Math.min(workerCount, pageCount), pageCount);
 }
 
 /* ── run state ────────────────────────────────────────────────────────── */
@@ -1044,6 +1057,9 @@ async function boot() {
   initSlider("retries", "outRetries");
   initSlider("pages", "outPages");
   initSlider("captcha", "outCaptcha", "s");
+  $("#workers").addEventListener("input", syncExtractorScope);
+  $("#pages").addEventListener("input", syncExtractorScope);
+  syncExtractorScope();
   initTabs();
   initSpotlight();
   initDropzone();

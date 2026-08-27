@@ -44,22 +44,7 @@ from moon_download import (
     RunFatalControl,
 )
 
-# ── THEME ──────────────────────────────────────────────────────────────────────
-BG      = "#080b12"
-BG2     = "#0c1018"
-BG3     = "#111520"
-SURFACE = "#161c2a"
-BORDER  = "#1e2840"
-ACC     = "#00d4ff"
-ACC2    = "#0099cc"
-ACC3    = "#00ffb3"
-GOLD    = "#f5a623"
-TEXT    = "#e8f0ff"
-TEXT2   = "#8899bb"
-TEXT3   = "#3d506e"
-OK      = "#00e676"
-ERR     = "#ff4d6d"
-WARN    = "#ffb547"
+
 # ── EXTRACTION ────────────────────────────────────────────────────────────────
 # Both host front-ends changed in 2026; the extraction layer now lives in
 # moon_extract.py so the engine and the CLI share one implementation.
@@ -213,8 +198,6 @@ class Engine:
 
     def finish_external_progress(self):
         self._on_done()
-
-    _LOG_MAX_LINES = 2000
 
     def log(self, msg, tag=""):
         """Thread-safe: called from the asyncio worker, drained by snapshot()."""

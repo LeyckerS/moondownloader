@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import pathlib
 import re
 import tempfile
@@ -28,11 +27,11 @@ DOWNLOAD_DEFS = (
 )
 
 
-def run_engine(engine, urls, retries=1) -> dict:
+def run_engine(engine, urls, retries=1, mode="links") -> dict:
     res = engine.start(
         {
             "links": urls,
-            "mode": "links",
+            "mode": mode,
             "out_folder": str(ROOT / "_tmp_out"),
             "workers": 4,
             "dl_streams": 4,
@@ -46,21 +45,18 @@ def run_engine(engine, urls, retries=1) -> dict:
         time.sleep(0.15)
 
     metrics = engine.snapshot(0)["metrics"]
-    return {"ok": metrics["ok"], "fail": metrics["fail"]}
+    return {"ok": metrics["ok"], "fail": metrics["fail"], "dl_done": metrics["dl_done"]}
 
 
-def run_cli(urls, retries=1) -> dict:
+def run_cli(urls, retries=1) -> None:
     with tempfile.TemporaryDirectory() as out:
         asyncio.run(moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"))
-        done = len(os.listdir(out))
-    return {"ok": len(urls) if done == 0 else done, "fail": 0}
 
 
-def assert_browser_counts(result, calls, urls, want_browsers: int) -> None:
+def assert_browser_counts(calls, want_browsers: int) -> None:
     assert calls["open_browser"] == want_browsers
     assert calls["playwright"] == want_browsers
     assert calls["close_browser"] + calls["shutdown_chrome"] == want_browsers
-    assert result["ok"] == len(urls)
 
 
 def cleanup() -> None:
@@ -81,20 +77,34 @@ def cleanup() -> None:
 
 def test_engine_fuckingfast_only_launches_no_browser(browser_calls):
     engine = moon_engine.Engine()
-
     try:
         result = run_engine(engine, FF)
-        assert_browser_counts(result, browser_calls, FF, want_browsers=0)
+        assert result["ok"] == len(FF)
+        assert_browser_counts(browser_calls, want_browsers=0)
     finally:
         cleanup()
 
 
 def test_engine_mixed_batch_launches_one_shared_browser(browser_calls):
     engine = moon_engine.Engine()
-
     try:
         result = run_engine(engine, FF + DN)
-        assert_browser_counts(result, browser_calls, FF + DN, want_browsers=1)
+        assert result["ok"] == len(FF + DN)
+        assert_browser_counts(browser_calls, want_browsers=1)
+    finally:
+        cleanup()
+
+
+def test_engine_download_mode_uses_stubbed_download_file(browser_calls):
+    # moon_engine imports download_file straight from moon_download, a
+    # separate name from moon_cli's. If the fixture only patches moon_cli's
+    # copy, this hits the real downloader against a fake URL instead of the
+    # stub -- see #160.
+    engine = moon_engine.Engine()
+    try:
+        result = run_engine(engine, FF, mode="download")
+        assert result == {"ok": len(FF), "fail": 0, "dl_done": len(FF)}
+        assert_browser_counts(browser_calls, want_browsers=0)
     finally:
         cleanup()
 
@@ -108,7 +118,7 @@ def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
         messages = [message for message, _tag in snapshot["log"]]
         record = engine._tracked[UNSUPPORTED[0]]
 
-        assert result == {"ok": 0, "fail": 1}
+        assert result == {"ok": 0, "fail": 1, "dl_done": 0}
         assert browser_calls["open_browser"] == 0
         assert browser_calls["playwright"] == 0
         assert record.status == "fail"
@@ -124,16 +134,16 @@ def test_engine_unsupported_host_fails_once_without_browser(browser_calls):
 
 def test_cli_fuckingfast_only_launches_no_browser(browser_calls):
     try:
-        result = run_cli(FF)
-        assert_browser_counts(result, browser_calls, FF, want_browsers=0)
+        run_cli(FF)
+        assert_browser_counts(browser_calls, want_browsers=0)
     finally:
         cleanup()
 
 
 def test_cli_mixed_batch_launches_one_shared_browser(browser_calls):
     try:
-        result = run_cli(FF + DN)
-        assert_browser_counts(result, browser_calls, FF + DN, want_browsers=1)
+        run_cli(FF + DN)
+        assert_browser_counts(browser_calls, want_browsers=1)
     finally:
         cleanup()
 

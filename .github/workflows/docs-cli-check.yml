@@ -11,6 +11,7 @@ on:
     paths:
       - "**.md"
       - "**.py"
+      - ".github/workflows/docs-cli-check.yml"
 
 jobs:
   docs-cli-flags:
