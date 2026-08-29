@@ -525,6 +525,18 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
 .track > i.on::after { transform: translateY(-50%) scale(1); }
 .track > i.teal   { background: linear-gradient(90deg, color-mix(in srgb, var(--teal) 55%, var(--blue)), var(--teal)); box-shadow: 0 0 12px -1px rgba(79, 227, 208, 0.8); }
 .track > i.violet { background: linear-gradient(90deg, color-mix(in srgb, var(--violet) 55%, var(--blue)), var(--violet)); box-shadow: 0 0 12px -1px rgba(139, 124, 240, 0.8); }
+/* Failure outcome overrides the usual lane accent, while width continues to
+   represent how much work the engine has processed. */
+.track > i.has-failures,
+.track > i.teal.has-failures,
+.track > i.violet.has-failures {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--red) 60%, var(--amber)),
+    var(--red)
+  );
+  box-shadow: 0 0 12px -1px color-mix(in srgb, var(--red) 75%, transparent);
+}
 .track > i[style*="width: 0px"]::after,
 .track > i:not([style])::after { display: none; }
 
@@ -614,6 +626,10 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
 .hstat[data-accent="violet"] .hstat-value b { color: var(--violet); }
 .hstat[data-accent="plain"]  .hstat-value b { color: var(--txt); }
 .hstat.hot[data-accent="mint"] .hstat-value b { text-shadow: 0 0 16px rgba(53, 214, 164, 0.5); }
+.hstat[data-accent="mint"].has-failures .hstat-value b {
+  color: var(--red);
+  text-shadow: 0 0 16px rgba(255, 92, 114, 0.45);
+}
 .hstat-sub { font-family: var(--mono); font-size: 0.58rem; color: var(--txt3); white-space: nowrap; }
 .hstat .track.mini { width: 7rem; max-width: 100%; }
 
@@ -980,6 +996,10 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
   background: linear-gradient(90deg, var(--blue), var(--teal) 55%, var(--violet));
   box-shadow: 0 0 12px rgba(79, 227, 208, 0.9);
   transition: width .45s cubic-bezier(.22, .8, .3, 1);
+}
+.topbar-progress > i.has-failures {
+  background: linear-gradient(90deg, var(--amber), var(--red) 55%, #ff8a9a);
+  box-shadow: 0 0 12px rgba(255, 92, 114, 0.9);
 }
 
 /* ── card entrance ───────────────────────────────────────────────────── */
