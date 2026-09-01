@@ -6,4 +6,4 @@ playwright==1.62.0
 curl_cffi==0.16.0
 certifi==2026.7.22
 cffi==2.1.0
-greenlet==3.5.4
+greenlet==3.5.5
