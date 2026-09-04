@@ -107,7 +107,7 @@ class Engine:
         self._t0         = 0.0
         self._t_end      = 0.0
         self._proxies    = 0
-        self._progress_extracted: set[str] = set()
+        self._progress_extracted_records: dict[int, FileRecord] = {}
 
         # Live FileRecord registry: the GUI reads these objects every snapshot,
         # so a row's speed and percentage come off the download loop itself
@@ -154,7 +154,7 @@ class Engine:
             self._ok = 0; self._fail = 0; self._kills = 0
             self._browsers = 0; self._dls = 0; self._proxies = proxies
             self._bytes_acc.clear(); self._t0 = time.monotonic(); self._t_end = 0.0
-            self._tracked.clear(); self._progress_extracted.clear()
+            self._tracked.clear(); self._progress_extracted_records.clear()
         with self._log_lock:
             self._log_ring.clear(); self._log_total = 0
 
@@ -162,12 +162,13 @@ class Engine:
         """Return the shared byte sample deque used by ``snapshot()``."""
         return self._bytes_acc
 
-    def mark_extraction(self, url: str, success: bool):
-        """Record one URL's final extraction result at most once."""
+    def mark_extraction(self, record: FileRecord, success: bool):
+        """Record one input entry's final extraction result at most once."""
+        record_id = id(record)
         with self._lock:
-            if url in self._progress_extracted:
+            if record_id in self._progress_extracted_records:
                 return self._dl_done >= self._dl_total
-            self._progress_extracted.add(url)
+            self._progress_extracted_records[record_id] = record
             self._url_done += 1
             if not success:
                 self._fail += 1
