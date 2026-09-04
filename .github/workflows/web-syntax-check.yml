@@ -1,0 +1,22 @@
+name: Web Syntax Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/web-syntax-check.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/web-syntax-check.yml"
+
+jobs:
+  javascript-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check JavaScript syntax
+        run: node --check web/app.js

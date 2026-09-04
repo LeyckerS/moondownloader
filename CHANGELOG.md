@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [@yhuikzdtguioaert](https://github.com/yhuikzdtguioaert) (#83, #169).
 
 ### Added
+- **A CI syntax gate for `web/`** — a pull request touching only `web/` ran no
+  checks at all, so a missing brace in `app.js` would have merged green. A
+  one-job workflow now runs `node --check web/app.js` behind a `web/**` paths
+  filter and watches its own file; its first run, on the pull request that
+  added it, was the live proof the trigger fires. The heavier `render_gui.py`
+  screenshot check is tracked separately (#179). Thanks to
+  [@tunglambk](https://github.com/tunglambk) (#174, #176).
 - **A regression test for the `download_file` stub**, which fails when the engine
   reaches the real downloader instead of the fixture — the gap #162 closed had no
   test behind it. `run_engine` also gained a `mode` parameter: the no-Chrome suite
