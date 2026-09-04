@@ -107,6 +107,7 @@ class Engine:
         self._t0         = 0.0
         self._t_end      = 0.0
         self._proxies    = 0
+        self._progress_extracted_records: dict[int, FileRecord] = {}
 
         # Live FileRecord registry: the GUI reads these objects every snapshot,
         # so a row's speed and percentage come off the download loop itself
@@ -136,6 +137,68 @@ class Engine:
 
     def _get(self, attr):
         with self._lock: return getattr(self, attr)
+
+    def begin_external_progress(self, total: int, output_folder: str = "", proxies: int = 0):
+        """Start a snapshot-backed run whose work is driven by another front-end.
+
+        The CLI owns its asyncio queue, but it must not grow a second copy of the
+        engine's progress arithmetic.  These small state transitions let it feed
+        the same snapshot contract without starting the GUI engine thread.
+        """
+        if output_folder:
+            self._cfg["out_folder"] = output_folder
+        with self._lock:
+            self._running = True; self._stop_flag = False; self._state = "running"
+            self._url_total = total; self._url_done = 0
+            self._dl_total = total; self._dl_done = 0
+            self._ok = 0; self._fail = 0; self._kills = 0
+            self._browsers = 0; self._dls = 0; self._proxies = proxies
+            self._bytes_acc.clear(); self._t0 = time.monotonic(); self._t_end = 0.0
+            self._tracked.clear(); self._progress_extracted_records.clear()
+        with self._log_lock:
+            self._log_ring.clear(); self._log_total = 0
+
+    def progress_bytes(self):
+        """Return the shared byte sample deque used by ``snapshot()``."""
+        return self._bytes_acc
+
+    def mark_extraction(self, record: FileRecord, success: bool):
+        """Record one input entry's final extraction result at most once."""
+        record_id = id(record)
+        with self._lock:
+            if record_id in self._progress_extracted_records:
+                return self._dl_done >= self._dl_total
+            self._progress_extracted_records[record_id] = record
+            self._url_done += 1
+            if not success:
+                self._fail += 1
+                self._dl_done += 1
+            return self._dl_done >= self._dl_total
+
+    def mark_download_start(self):
+        with self._lock:
+            self._dls += 1
+
+    def mark_download_end(self, success: bool):
+        with self._lock:
+            self._dls = max(0, self._dls - 1)
+            self._dl_done += 1
+            if success:
+                self._ok += 1
+            else:
+                self._fail += 1
+            return self._dl_done >= self._dl_total
+
+    def mark_download_retry(self):
+        with self._lock:
+            self._dls = max(0, self._dls - 1)
+
+    def mark_download_aborted(self):
+        with self._lock:
+            self._dls = max(0, self._dls - 1)
+
+    def finish_external_progress(self):
+        self._on_done()
 
     def log(self, msg, tag=""):
         """Thread-safe: called from the asyncio worker, drained by snapshot()."""

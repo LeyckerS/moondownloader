@@ -112,6 +112,16 @@ python moon_cli.py \
 The `fuckingfast.co` entries are extracted without a browser. The datanodes entry
 causes the shared Chrome instance to start; it is not one browser per worker.
 
+## Progress output
+
+While a run is active, the CLI samples the same `Engine.snapshot()` contract used
+by the GUI. The phase is explicit: `extracting [done/total]` while provider pages
+are being resolved, then `downloading [done/total]` while files are transferring.
+The aggregate speed, active-download count and byte total come from that snapshot,
+so the CLI and GUI use one calculation. Identical snapshots are not printed again,
+which keeps a slow extraction phase from filling the terminal with repeated zero
+speed lines.
+
 ## Exit codes
 
 | Code | Meaning |
