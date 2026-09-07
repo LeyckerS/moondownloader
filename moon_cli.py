@@ -7,8 +7,8 @@ Usage:
     python moon_cli.py --urls links.txt --output /path/to/downloads
     python moon_cli.py --urls links.txt --output ./dl --browsers 8 --streams 24 --retries 3
 """
-import os, sys, asyncio, threading, argparse
-import time, traceback, collections
+import os, sys, asyncio, argparse
+import time, traceback
 from urllib.parse import urlparse, unquote
 
 from moon_download import (
@@ -21,6 +21,7 @@ from moon_download import (
     download_file,
     RunFatalControl,
 )
+from moon_engine import Engine
 
 # ── EXTRACTION ────────────────────────────────────────────────────────────────
 # Both host front-ends changed in 2026; the extraction layer now lives in
@@ -55,6 +56,28 @@ print(f"datanodes: up to {DN_LANES} persistent browser window(s) "
 def _fmt_speed(mbs: float) -> str:
     return f"{mbs:.1f} MB/s" if mbs >= 1 else f"{mbs*1024:.0f} KB/s"
 
+def _progress_line(snapshot: dict, total: int) -> str:
+    metrics = snapshot["metrics"]
+    stage = metrics["stage"]
+    if stage == "extracting":
+        phase = f"extracting {metrics['extract_done']}/{metrics['extract_total']}"
+    elif stage == "downloading":
+        phase = f"downloading {metrics['dl_done']}/{metrics['dl_total']}"
+    else:
+        phase = f"{metrics['ok']}/{total} done"
+    return (f"  [{int(metrics['elapsed_s'] // 60):02d}:{int(metrics['elapsed_s'] % 60):02d}]  "
+            f"{phase}  |  {metrics['active']} active  |  "
+            f"{_fmt_speed(metrics['speed_mbs'])}  |  "
+            f"{metrics['bytes_total']/1e9:.2f} GB")
+
+def _progress_key(snapshot: dict) -> tuple:
+    metrics = snapshot["metrics"]
+    return (
+        metrics["stage"], metrics["extract_done"], metrics["extract_total"],
+        metrics["dl_done"], metrics["dl_total"], metrics["active"],
+        metrics["speed_mbs"], metrics["bytes_total"], metrics["ok"], metrics["fail"],
+    )
+
 async def run(urls: list[str], output_dir: str, n_workers: int,
               max_dl: int, max_retries: int, proxy_path: str, is_default_proxies: bool = False):
 
@@ -70,14 +93,11 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
     all_tasks     : list        = []
     tasks_lock    = asyncio.Lock()
     kill_counts   : dict[str,int] = {}
-    bytes_acc     = collections.deque(maxlen=200000)
-    lock          = threading.Lock()
-    n_done        = 0
     all_done      = asyncio.Event()
-    ok_count      = 0
-    fail_count    = 0
-    dls_active    = 0
     fatal_control = RunFatalControl()
+    progress      = Engine()
+    progress.begin_external_progress(len(urls), output_dir, n_proxies)
+    bytes_acc     = progress.progress_bytes()
 
     cfg = {"browsers": n_workers, "dl_streams": max_dl, "retries": max_retries,
            "total_links": len(urls)}
@@ -92,16 +112,11 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
             print(f"  [rename] {filename} -> {rec.filename} (filename collision)")
         await q.put((url, 1, rec))
 
-    def mark_done():
-        nonlocal n_done
-        n_done += 1
-        if n_done >= len(urls): all_done.set()
-
-    t0 = time.monotonic()
-
     # Progress printer (runs every 2s)
     stop_progress = asyncio.Event()
+    last_progress_key = None
     async def progress_loop():
+        nonlocal last_progress_key
         while not stop_progress.is_set():
             try:
                 await asyncio.wait_for(stop_progress.wait(), timeout=2.0)
@@ -109,42 +124,33 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 pass
             if stop_progress.is_set():
                 break
-            snap = list(bytes_acc)
-            now  = time.monotonic()
-            cut  = now - 3.0
-            recent = [(t, b) for t, b in snap if t > cut]
-            mbs = 0.0
-            if len(recent) > 1:
-                span = max(min(3.0,now - t0),0.05)
-                mbs  = sum(b for _, b in recent) / span / 1_048_576
-            total_dl = sum(b for _, b in snap)
-            el = now - t0
-            with lock:
-                ok, dls = ok_count, dls_active
-            print(f"  [{int(el//60):02d}:{int(el%60):02d}]  "
-                  f"{ok}/{len(urls)} done  |  "
-                  f"{dls} active  |  "
-                  f"{_fmt_speed(mbs)}  |  "
-                  f"{total_dl/1e9:.2f} GB", flush=True)
+            snapshot = progress.snapshot()
+            key = _progress_key(snapshot)
+            if key != last_progress_key:
+                line = _progress_line(snapshot, len(urls))
+                print(line, flush=True)
+                last_progress_key = key
 
     # Kept in a local: a task with no reference can be collected mid-run.
     progress_t = asyncio.create_task(progress_loop())  # noqa: F841
 
     async def do_dl(proxy_url, cookies, filename, orig_url, rec):
-        nonlocal ok_count, fail_count, dls_active
         async with dl_sem:
             if fatal_control.is_set():
                 rec.status = "aborted"
                 return
-            with lock: dls_active += 1
+            progress.mark_download_start()
+            finalized = False
             try:
                 dest = os.path.join(output_dir, filename)
 
                 if os.path.exists(dest):
-                    with lock: ok_count += 1
                     print(f"  [exists] {filename}")
                     rec.status = "ok"; rec.dl_s = 0.0
-                    mark_done(); return
+                    if progress.mark_download_end(True):
+                        all_done.set()
+                    finalized = True
+                    return
 
                 kc       = kill_counts.get(orig_url, 0)
                 kill_evt = asyncio.Event()
@@ -155,30 +161,34 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 rec.dl_s = max(time.monotonic() - rec.dl_start, 0.001)
 
                 if ok:
-                    with lock: ok_count += 1
                     spd = f"  ({rec.avg_mbs:.1f} MB/s)" if rec.avg_mbs > 0 else ""
                     print(f"  [ok] {filename}{spd}")
-                    rec.status = "ok"; mark_done()
+                    rec.status = "ok"
+                    if progress.mark_download_end(True):
+                        all_done.set()
+                    finalized = True
                 elif msg == "stall_killed":
                     new_kc = kc + 1; kill_counts[orig_url] = new_kc
                     print(f"  [kill#{new_kc}] {filename}  ({bytes_done//(1<<20)}MB) -> re-extract")
                     rec.queued_at = time.monotonic(); rec.status = "pending"
+                    progress.mark_download_retry(); finalized = True
                     if not fatal_control.is_set():
                         await q.put((orig_url, 1, rec))
                 elif msg == "aborted_disk_full":
-                    rec.status = "aborted"
+                    rec.status = "aborted"; progress.mark_download_aborted(); finalized = True
                 else:
-                    with lock: fail_count += 1
                     failed_urls.append(orig_url)
                     rec.status = "fail"; rec.error = msg
                     if msg != "disk_full":
                         print(f"  [fail] {filename}: {msg}")
-                    mark_done()
+                    if progress.mark_download_end(False):
+                        all_done.set()
+                    finalized = True
             finally:
-                with lock: dls_active -= 1
+                if not finalized:
+                    progress.mark_download_aborted()
 
     async def browser_worker(get_browser, wid):
-        nonlocal ok_count, fail_count
         while not fatal_control.is_set():
             if all_done.is_set() and q.empty(): break
             try:
@@ -218,6 +228,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                             await do_dl(pu, "", fn, ou, r)
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
+                        progress.mark_extraction(rec, True)
                         success = True
                 elif DATANODES_HOST in parsed.netloc:
                     # API key set -> single JSON GET, no browser, no captcha.
@@ -240,6 +251,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                             await do_dl(pu, co, fn, ou, r)
                         t = asyncio.create_task(_task())
                         async with tasks_lock: all_tasks.append(t)
+                        progress.mark_extraction(rec, True)
                         success = True
                 else:
                     host = parsed.hostname or parsed.netloc or "(missing host)"
@@ -271,9 +283,10 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 q.task_done(); continue
 
             if not success and not is_re and not fatal_control.is_set():
-                with lock: fail_count += 1
                 failed_urls.append(url)
-                rec.status = "fail"; mark_done()
+                rec.status = "fail"
+                if progress.mark_extraction(rec, False):
+                    all_done.set()
 
             q.task_done()
 
@@ -321,17 +334,21 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         # Report persistence is independent of the fatal download state.
         print(f"[warn] Log save error: {e}")
 
-    el = time.monotonic() - t0
-    total_bytes = sum(b for _, b in bytes_acc)
+    progress.finish_external_progress()
+    metrics = progress.snapshot()["metrics"]
+    el = metrics["elapsed_s"]
+    total_bytes = metrics["bytes_total"]
     disk_full = fatal_control.disk_full
     print(f"\n{'='*60}")
     if disk_full is not None:
         print(f"Run stopped: disk full in {disk_full.folder}  |  "
-              f"ok={ok_count}  fail={fail_count}")
+              f"ok={metrics['ok']}  fail={metrics['fail']}")
     else:
+        rate_mbs = total_bytes / el / 1e6 if el else 0.0
         print(f"Done in {int(el//60)}m {int(el%60)}s  |  "
-              f"ok={ok_count}  fail={fail_count}  |  "
-              f"{total_bytes/1e9:.2f} GB  @  {total_bytes/el/1e6:.1f} MB/s")
+              f"ok={metrics['ok']}  fail={metrics['fail']}  |  "
+              f"{total_bytes/1e9:.2f} GB  @  "
+              f"{rate_mbs:.1f} MB/s")
 
     if failed_urls:
         fp = os.path.join(base, "failed_links.txt")
@@ -342,7 +359,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
         except OSError as e:
             print(f"[warn] Failed links save error: {e}")
 
-    return ok_count, fail_count, disk_full is not None
+    return metrics["ok"], metrics["fail"], disk_full is not None
 
 # ── ENTRY POINT ────────────────────────────────────────────────────────────────
 def main():
