@@ -48,9 +48,14 @@ def run_engine(engine, urls, retries=1, mode="links") -> dict:
     return {"ok": metrics["ok"], "fail": metrics["fail"], "dl_done": metrics["dl_done"]}
 
 
-def run_cli(urls, retries=1) -> None:
+def run_cli(urls, retries=1) -> tuple[int, int, bool]:
     with tempfile.TemporaryDirectory() as out:
-        asyncio.run(moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"))
+        return asyncio.run(
+            asyncio.wait_for(
+                moon_cli.run(urls, out, 4, 4, retries, "proxies.txt"),
+                timeout=5,
+            )
+        )
 
 
 def assert_browser_counts(calls, want_browsers: int) -> None:
@@ -157,6 +162,19 @@ def test_cli_unsupported_host_fails_once_without_browser(browser_calls, capsys):
         assert browser_calls["playwright"] == 0
         assert "unsupported host: youtube.com — supported: datanodes.to, fuckingfast.co" in output
         assert "retry in" not in output
+    finally:
+        cleanup()
+
+
+def test_cli_duplicate_unsupported_urls_finish_independently(browser_calls, capsys):
+    try:
+        result = run_cli(UNSUPPORTED * 2, retries=1)
+        output = capsys.readouterr().out
+
+        assert result == (0, 2, False)
+        assert browser_calls["open_browser"] == 0
+        assert browser_calls["playwright"] == 0
+        assert output.count("[fail] unsupported host: youtube.com") == 2
     finally:
         cleanup()
 
