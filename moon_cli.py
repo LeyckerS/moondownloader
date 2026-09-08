@@ -270,7 +270,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 await q.put((url, attempt+1, rec))
                 q.task_done(); continue
 
-            if not success and not is_re and not fatal_control.is_set():
+            if not success and not fatal_control.is_set():
                 with lock: fail_count += 1
                 failed_urls.append(url)
                 rec.status = "fail"; mark_done()
