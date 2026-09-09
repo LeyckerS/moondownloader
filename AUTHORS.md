@@ -39,6 +39,7 @@ first contribution:
 | [@FlaggedATX](https://github.com/FlaggedATX) | corrected the `ruff.toml` comment that claimed line length was handled elsewhere — nothing enforces it, and the file now says so — on their first pull request (#79, #171) |
 | [@snowyukitty](https://github.com/snowyukitty) | removed the double-count of the final write buffer in `bytes_acc`, which made every small file's bytes count twice in the totals, and pinned the accounting with nine regression tests whose expectations are read from the chunks the fake session actually delivered rather than from a model of the loop (#172, #175) |
 | [@tunglambk](https://github.com/tunglambk) | gave `web/`-only pull requests their first CI check — `node --check web/app.js` behind a `web/**` paths filter, closing the hole where a syntax error in the GUI could merge with an empty check list (#174, #176) |
+| [@breezeFur](https://github.com/breezeFur) | made `moon_cli.py` drive its progress line from `Engine.snapshot()`, the contract the GUI already reads, instead of a second copy of the byte-rate arithmetic and counters — the line now names its phase, `extracting done/total` then `downloading done/total`, identical snapshots are not reprinted, and a stall-killed URL that is re-extracted cannot advance the count twice (#97, #154) |
 
 Dependabot handles the dependency and action bumps.
 

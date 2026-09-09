@@ -33,7 +33,7 @@ body:
     attributes:
       label: Version
       description: Which version of MoonDownloader?
-      placeholder: "v14.1"
+      placeholder: "v4.2"
     validations:
       required: true
   - type: textarea

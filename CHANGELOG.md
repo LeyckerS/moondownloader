@@ -5,13 +5,60 @@ All notable changes to Moon Downloader will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Versioning.** The public releases are **V1** (tag `v14.1`), **V2** (tag `v2.0`) and
-> **V3** (tag `v3.0`). V2 is where the numbering reset: the 14.x and 15.0 entries below keep
+> **Versioning.** The public releases are **V1** (tag `v14.1`), **V2** (tag `v2.0`),
+> **V3** (tag `v3.0`) and the **V4** line (`v4.0` onward). V2 is where the numbering reset: the 14.x and 15.0 entries below keep
 > the numbers they shipped with, and `v14.1` keeps its tag so its download link never
 > breaks. V3 is a major because the interface was rebuilt, not because the engine changed —
 > extraction, downloading and the CLI are the same code they were in 2.1.
 
 ## [Unreleased]
+
+## [4.2] — 2026-09-09
+
+A maintenance release. The change you will see most is in the CLI: its progress
+line now comes from the same snapshot the GUI reads, with an explicit
+extracting/downloading phase. The rest is accounting, one GUI note and CI — a
+write buffer counted twice, a slider that promised concurrency datanodes never
+gets, a syntax check for `web/`, two configuration files CI did not watch — plus
+the last four places that still said 14.x or 4.0. Every entry except the version
+strings and the Dependabot pins came from an outside contributor.
+
+### Added
+- **A CI syntax gate for `web/`** — a pull request touching only `web/` ran no
+  checks at all, so a missing brace in `app.js` would have merged green. A
+  one-job workflow now runs `node --check web/app.js` behind a `web/**` paths
+  filter and watches its own file; its first run, on the pull request that
+  added it, was the live proof the trigger fires. The heavier `render_gui.py`
+  screenshot check is tracked separately (#179). Thanks to
+  [@tunglambk](https://github.com/tunglambk) (#174, #176).
+- **A regression test for the `download_file` stub**, which fails when the engine
+  reaches the real downloader instead of the fixture — the gap #162 closed had no
+  test behind it. `run_engine` also gained a `mode` parameter: the no-Chrome suite
+  had only ever exercised link extraction, which is why the missing stub went
+  unseen. Thanks to [@harshvardhan60792](https://github.com/harshvardhan60792) (#160, #170).
+
+### Changed
+- **`moon_cli.py` drives its progress line from `Engine.snapshot()`** — the same
+  contract the GUI reads — instead of keeping a second copy of the byte-rate
+  arithmetic, the counters and the lock that guarded them. The line now names
+  its phase, `extracting done/total` while provider pages are being resolved and
+  `downloading done/total` while files transfer, and a snapshot identical to the
+  last one is not printed again, so a slow extraction no longer fills the
+  terminal with repeated zero-speed lines. Extraction progress is keyed by record
+  inside the engine, so a stall-killed URL that is re-extracted cannot advance
+  the count a second time, and the final summary and the 4.1 exit codes read the
+  engine's own `ok` and `fail` counts. Documented in `docs/CLI.md` ("Progress
+  output") and covered by `tests/test_cli_progress.py`. Thanks to
+  [@breezeFur](https://github.com/breezeFur) (#97, #154).
+- **`constraints.txt` pins moved** to `curl_cffi==0.16.2`, `cffi==2.1.1` and
+  `greenlet==3.5.5` (Dependabot, #181–#183). The ranges in `requirements.txt` are
+  unchanged.
+
+### Removed
+- **`Engine._LOG_MAX_LINES`** — defined once and read nowhere. Another constant
+  left over from when `moon_engine.py` was generated from a tkinter GUI; the log
+  ring is bounded by `collections.deque(maxlen=6000)` instead. Thanks to
+  [@mazi-eth](https://github.com/mazi-eth) (#80, #167).
 
 ### Fixed
 - **A completed file's final write buffer was counted twice in `bytes_acc`.**
@@ -19,9 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the joined leftover buffer — so any transfer below the 16 MiB write buffer
   counted exactly double in `bytes_total`, the Downloaded card, the CLI totals
   and the ETA's average-file term. Measured before fixing: a 5 MiB transfer
-  recorded 10 MiB. The duplicate append (arrived with #150's write-buffering)
-  is gone, and nine regression tests pin every byte to exactly one entry —
-  with a negative control showing 6 of them fail on the unfixed code. Thanks
+  recorded 10 MiB. The duplicate append (there since 14.0 — #150 only rewrote
+  the line) is gone, and nine regression tests pin every byte to exactly one
+  entry — with a negative control showing 6 of them fail on the unfixed code. Thanks
   to [@snowyukitty](https://github.com/snowyukitty) (#172, #175).
 - **The `E501` comment in `ruff.toml` claimed line length was "handled above
   via line-length".** It is not handled anywhere: with `E501` switched off the
@@ -39,28 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a language switch. The cap itself is deliberately unchanged: several identities
   from one IP read as a bot farm to Turnstile. Thanks to
   [@yhuikzdtguioaert](https://github.com/yhuikzdtguioaert) (#83, #169).
-
-### Added
-- **A CI syntax gate for `web/`** — a pull request touching only `web/` ran no
-  checks at all, so a missing brace in `app.js` would have merged green. A
-  one-job workflow now runs `node --check web/app.js` behind a `web/**` paths
-  filter and watches its own file; its first run, on the pull request that
-  added it, was the live proof the trigger fires. The heavier `render_gui.py`
-  screenshot check is tracked separately (#179). Thanks to
-  [@tunglambk](https://github.com/tunglambk) (#174, #176).
-- **A regression test for the `download_file` stub**, which fails when the engine
-  reaches the real downloader instead of the fixture — the gap #162 closed had no
-  test behind it. `run_engine` also gained a `mode` parameter: the no-Chrome suite
-  had only ever exercised link extraction, which is why the missing stub went
-  unseen. Thanks to [@harshvardhan60792](https://github.com/harshvardhan60792) (#160, #170).
-
-### Removed
-- **`Engine._LOG_MAX_LINES`** — defined once and read nowhere. Another constant
-  left over from when `moon_engine.py` was generated from a tkinter GUI; the log
-  ring is bounded by `collections.deque(maxlen=6000)` instead. Thanks to
-  [@mazi-eth](https://github.com/mazi-eth) (#80, #167).
-
-### Fixed
 - **`docs-cli-check.yml` did not watch its own file on pull requests**, only on
   push, so an edit to that workflow arrived with an empty check list. With #165
   this completes the set: every configuration file that controls CI now triggers
@@ -73,6 +98,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now in the filter. Verified on `main` with a commit touching `ruff.toml` alone:
   `Lint` fires, `Docs CLI Check` correctly does not. Thanks to
   [@nightcityblade](https://github.com/nightcityblade) (#164, #165).
+- **Four places still said 14.x or 4.0.** `SECURITY.md` listed the 14.x line as
+  the supported one, a numbering the project left behind at V2; `web/index.html`
+  and the `app.js` fallback and demo mode showed v4.0; the bug-report form
+  suggested `v14.1` as an example. They now say 4.x and v4.2, matching `VERSION`
+  in `moon_download.py`.
 
 ## [4.1] — 2026-08-12
 

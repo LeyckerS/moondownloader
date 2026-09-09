@@ -6,8 +6,8 @@ Only the most recent release line receives security updates.
 
 | Version | Supported          |
 |---------|--------------------|
-| 14.x    | :white_check_mark: |
-| < 14.0  | :x:                |
+| 4.x     | :white_check_mark: |
+| < 4.0   | :x:                |
 
 ## Reporting a Vulnerability
 

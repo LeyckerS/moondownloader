@@ -2,7 +2,7 @@
 
 # 🌙 Moon Downloader
 
-### **V4.1**
+### **V4.2**
 
 **Bulk file downloader** — real-Chrome extraction for datanodes.to, pure-HTTP extraction for fuckingfast.co, aiohttp streaming, and a GUI that runs on Edge WebView2.
 
@@ -97,10 +97,23 @@ files done, 0 failed, no browser window opened. Method and instrumentation in
 
 ---
 
-## 🌗 What V4.1 is
+## 🌗 What V4.2 is
+
+**A maintenance release.** The change you will notice most is in the CLI: its progress line now comes
+from the same `Engine.snapshot()` the GUI reads, names its phase — `extracting 12/48`, then
+`downloading 30/48` — and stops repeating itself while a slow extraction runs. The rest is accounting
+and CI, from outside contributors: a final write buffer that was counted twice in the byte totals, an
+`Extractors` slider that implied a concurrency datanodes never gets (it now shows the real limit), a
+syntax check for `web/` where a pull request used to merge green with no checks at all, and two CI
+configuration files that CI itself did not watch — plus, from the maintainer, the last four places
+that still said 14.x or 4.0. Full detail and credits in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## 🌘 What V4.1 was
 
 **A maintenance release written entirely by other people** — every entry in its changelog came from
-an outside contributor. Two are bugs you can hit in normal use:
+an outside contributor. Two were bugs you could hit in normal use:
 
 - **A full destination disk stops the run.** `ENOSPC` used to be handled like any other transfer
   error, so the queue kept going and the retry machinery kept re-fetching data that could never be
@@ -111,7 +124,7 @@ an outside contributor. Two are bugs you can hit in normal use:
   in-progress download ran to completion, so on a large file the button appeared to do nothing for
   minutes.
 
-The rest make the project harder to break by accident: structured CLI exit codes so a script can tell
+The rest made the project harder to break by accident: structured CLI exit codes so a script can tell
 success from partial from total failure, a linter that runs once per pull request instead of five
 times, a test assertion that could never fail, and a test stub that left the engine able to reach the
 real network. Full detail and credits in [CHANGELOG.md](CHANGELOG.md).
@@ -397,7 +410,7 @@ python render_gui.py out/           # renders at 2554x1400 and 1440x900 + overfl
 python moon_engine.py          # headless engine: prints a snapshot and exits
 ```
 
-50 tests, and they need no browser, no display and no Playwright install: Chrome and the network are
+68 tests, and they need no browser, no display and no Playwright install: Chrome and the network are
 stubbed at the `moon_extract` boundary, so the suite runs anywhere. CI byte-compiles every tracked
 Python file on **3.10 through 3.14**, runs `ruff` against a pinned version, checks that every runtime
 dependency carries an upper bound, and runs the suite — on every push and every pull request
