@@ -193,6 +193,12 @@ class Engine:
         with self._lock:
             self._dls = max(0, self._dls - 1)
 
+    def mark_download_retry_failed(self):
+        with self._lock:
+            self._dl_done += 1
+            self._fail += 1
+            return self._dl_done >= self._dl_total
+
     def mark_download_aborted(self):
         with self._lock:
             self._dls = max(0, self._dls - 1)
@@ -389,7 +395,7 @@ class Engine:
                     await q.put((url, attempt+1, rec))
                     q.task_done(); continue
 
-                if not success and not is_re and not fatal_control.is_set():
+                if not success and not fatal_control.is_set():
                     self._inc("_fail"); failed_urls.append(url)
                     rec.status="fail"; mark_done_fn()
 

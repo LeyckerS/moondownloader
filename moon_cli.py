@@ -169,6 +169,7 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                     finalized = True
                 elif msg == "stall_killed":
                     new_kc = kc + 1; kill_counts[orig_url] = new_kc
+                    rec.stall_kills = new_kc
                     print(f"  [kill#{new_kc}] {filename}  ({bytes_done//(1<<20)}MB) -> re-extract")
                     rec.queued_at = time.monotonic(); rec.status = "pending"
                     progress.mark_download_retry(); finalized = True
@@ -282,10 +283,13 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 await q.put((url, attempt+1, rec))
                 q.task_done(); continue
 
-            if not success and not is_re and not fatal_control.is_set():
+            if not success and not fatal_control.is_set():
                 failed_urls.append(url)
                 rec.status = "fail"
-                if progress.mark_extraction(rec, False):
+                if is_re:
+                    if progress.mark_download_retry_failed():
+                        all_done.set()
+                elif progress.mark_extraction(rec, False):
                     all_done.set()
 
             q.task_done()
