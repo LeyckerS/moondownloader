@@ -747,7 +747,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: roun
   transform: rotate(-90deg);
   transform-origin: 50% 50%;
   stroke-dasharray: 0 100;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 80%, transparent));
+  /* WebView2 can render a square backdrop behind SVG drop-shadow filters on
+     the ring. The glow is purely decorative, so keep the visible ring and drop
+     the filter instead of shipping a fake patch behind each transfer. */
   transition: stroke-dasharray .3s linear;
 }
 .ring .ring-tick,
