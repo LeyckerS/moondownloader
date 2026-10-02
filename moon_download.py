@@ -100,23 +100,54 @@ async def _close_sess():
 _moon_extract._sess = _sess
 _moon_extract.USER_AGENTS = USER_AGENTS
 
+_PROXY_PORT_RE = re.compile(r"[0-9]{1,5}")
+
+
+def _valid_port(value: str) -> bool:
+    """A proxy port is a plain decimal number inside the TCP range.
+
+    ``int()`` alone is too lenient -- it accepts " 80", "+80" and non-ASCII
+    digits -- so the digits are matched explicitly before the range check.
+    """
+    return bool(_PROXY_PORT_RE.fullmatch(value)) and 1 <= int(value) <= 65535
+
+
+def _valid_host(value: str) -> bool:
+    """Reject empty hosts and hosts containing whitespace."""
+    return bool(value) and not any(char.isspace() for char in value)
+
+
 def parse_proxy_line(line: str) -> dict | None:
+    """Parse one proxy-list line, or return None when it cannot be used.
+
+    Accepts ``host:port``, ``ip:port:user:pass``, ``user:pass:ip:port`` and
+    whole ``http(s)://`` / ``socks*://`` URLs. A line that names no usable host
+    and port is rejected rather than counted as loaded, so a typo lands in the
+    "skipped" tally instead of failing on every request that rotates onto it.
+    """
     try:
         if line.startswith(("http://", "https://", "socks")):
-            return {"url": line, "auth": None}
+            # "socks" and "http://" name no host, so they are not proxies at all.
+            _, separator, remainder = line.partition("://")
+            if separator and remainder.split("/", 1)[0].split("@")[-1]:
+                return {"url": line, "auth": None}
+            return None
         parts = line.split(":")
         if len(parts) == 4:
             if re.match(r"^\d+\.\d+\.\d+\.\d+$", parts[0]):
                 ip, port, user, passwd = parts
             else:
                 user, passwd, ip, port = parts
+            if not (_valid_host(ip) and _valid_port(port)):
+                return None
             return {
                 "url": f"http://{ip}:{port}",
                 "auth": aiohttp.BasicAuth(user, passwd),
             }
         elif len(parts) == 2:
             ip, port = parts
-            return {"url": f"http://{ip}:{port}", "auth": None}
+            if _valid_host(ip) and _valid_port(port):
+                return {"url": f"http://{ip}:{port}", "auth": None}
     except Exception:
         pass
     return None
