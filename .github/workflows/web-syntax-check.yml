@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - "web/**"
+      - "render_gui.py"
+      - "requirements.txt"
+      - "constraints.txt"
       - ".github/workflows/web-syntax-check.yml"
   pull_request:
     paths:
       - "web/**"
+      - "render_gui.py"
+      - "requirements.txt"
+      - "constraints.txt"
       - ".github/workflows/web-syntax-check.yml"
 
 jobs:
@@ -20,3 +26,50 @@ jobs:
 
       - name: Check JavaScript syntax
         run: node --check web/app.js
+
+  # `node --check` only proves the file parses. A page can parse and then break:
+  # a TypeError thrown while the mock engine fills, an element wider than the
+  # viewport, a horizontal scrollbar, rows that never render. render_gui.py
+  # already catches all four in headless Chromium and exits non-zero; this job
+  # is what puts it in front of a pull request.
+  render-gui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt -c constraints.txt
+
+      # Chromium is ~550 MB, so a warm cache turns a ~50 s download into no
+      # download at all. Keyed on both dependency files: playwright pins the
+      # browser revision it wants, so bumping either one has to miss.
+      - name: Cache the Chromium build
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt', 'constraints.txt') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Chromium and its system libraries
+        run: python -m playwright install --with-deps chromium
+
+      - name: Render the GUI at both viewports
+        run: python render_gui.py shots
+
+      # if: always() so a failing run still leaves the picture of what broke --
+      # a broken-state screenshot is written even when the check reports a fault.
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gui-screenshots
+          path: shots/
+          if-no-files-found: warn
+          retention-days: 7

@@ -11,10 +11,12 @@ from __future__ import annotations
 import pathlib
 import sys
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 HERE = pathlib.Path(__file__).parent
 PAGE = (HERE / "web" / "index.html").resolve()
+ROW_TIMEOUT_MS = 8000
 
 
 def shoot(out_dir: pathlib.Path, sizes: list[tuple[int, int]]) -> int:
@@ -29,8 +31,20 @@ def shoot(out_dir: pathlib.Path, sizes: list[tuple[int, int]]) -> int:
             errors: list[str] = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
-            page.goto(PAGE.as_uri())
-            page.wait_for_selector(".frow", timeout=8000)
+            try:
+                page.goto(PAGE.as_uri())
+                page.wait_for_selector(".frow", timeout=ROW_TIMEOUT_MS)
+            except PlaywrightTimeout:
+                # A page that never draws its rows is the usual failure, and the
+                # picture of it is the useful part -- a traceback from deep
+                # inside Playwright is not. Name the viewport, keep the shot,
+                # and go on to the next size so one run reports every failure
+                # rather than only the first.
+                problems.append(
+                    f"{width}x{height} no .frow rendered in {ROW_TIMEOUT_MS} ms")
+                page.screenshot(path=str(out_dir / f"web_{width}x{height}_broken.png"))
+                page.close()
+                continue
             page.wait_for_timeout(2600)           # let the mock engine fill the spark
             shot = out_dir / f"web_{width}x{height}_files.png"
             page.screenshot(path=str(shot))
