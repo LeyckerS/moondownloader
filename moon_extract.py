@@ -331,6 +331,10 @@ async def extract_fuckingfast(url: str, get_browser=None) -> str | None:
 # Only heavy media is dropped. Stylesheets MUST load: the button finder measures
 # getBoundingClientRect(), and with CSS blocked every element collapses to 0x0.
 # Ad hosts must load too — step 2 runs `:detect-adblock="true"`.
+# Block unrelated top-level redirects during the download flow by default. Set
+# MOON_DN_BLOCK_SPAM_NAV=0 to restore the previous navigation behavior.
+DN_BLOCK_SAME_TAB_SPAM = os.environ.get("MOON_DN_BLOCK_SPAM_NAV", "1") != "0"
+
 DN_BLOCKED_RES = {"image", "media", "font"}
 
 DN_ALWAYS_ALLOW = (
@@ -587,6 +591,28 @@ def dn_is_file_url(candidate: str, landing_host: str, want_name: str | None,
     return False
 
 
+def dn_should_block_external_navigation(candidate: str, landing_host: str,
+                                        want_name: str | None, self_urls: frozenset,
+                                        *, is_navigation: bool,
+                                        is_main_frame: bool) -> bool:
+    """Block unrecognized top-level redirects without filtering page resources."""
+    if not DN_BLOCK_SAME_TAB_SPAM or not is_navigation or not is_main_frame:
+        return False
+
+    nav_host = urlparse(candidate).netloc.lower()
+    if not nav_host:
+        return False
+
+    base_host = landing_host[4:] if landing_host.startswith("www.") else landing_host
+    datanodes_nav = nav_host in {landing_host, base_host, f"www.{base_host}"}
+    cloudflare_nav = (
+        nav_host == "challenges.cloudflare.com"
+        or nav_host.endswith(".challenges.cloudflare.com")
+    )
+    file_nav = dn_is_file_url(candidate, landing_host, want_name, self_urls)
+    return not datanodes_nav and not cloudflare_nav and not file_nav
+
+
 def dn_file_code(url: str) -> str | None:
     """Extract the datanodes file_code from a share URL (`/{code}/{filename}`)."""
     for part in urlparse(url).path.strip("/").split("/"):
@@ -804,6 +830,14 @@ async def _extract_datanodes_on_context(context, url: str,
         req   = route.request
         u, rt = req.url, req.resource_type
         try:
+            if dn_should_block_external_navigation(
+                    u, landing_host, want_name, self_urls,
+                    is_navigation=req.is_navigation_request(),
+                    is_main_frame=req.frame == page.main_frame):
+                _d(f"blocked same-tab external navigation: {u[:180]}")
+                await route.abort("blockedbyclient")
+                return
+
             if _take(u):
                 await route.abort()          # URL is all we need; aiohttp transfers
                 return

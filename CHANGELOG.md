@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Datanodes extraction blocks unrelated same-tab redirects.** The browser route
+  now blocks unrecognized top-level navigations while allowing Datanodes pages,
+  Cloudflare challenges and recognized direct-file handoffs. Set
+  `MOON_DN_BLOCK_SPAM_NAV=0` to restore the previous behavior.
+
 ## [4.2] — 2026-09-09
 
 A maintenance release. The change you will see most is in the CLI: its progress
