@@ -47,7 +47,10 @@ import time
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse, unquote
 
-DEBUG = bool(os.environ.get("MOON_DEBUG"))
+# `1` switches tracing on; see docs/CONFIGURATION.md. Reading it as
+# bool(get(...)) meant every non-empty value counted, MOON_DEBUG=0 included.
+DEBUG = os.environ.get("MOON_DEBUG", "0").strip().lower() not in (
+    "", "0", "no", "off", "false")
 
 DATANODES_HOST = "datanodes.to"
 FUCKINGFAST_HOST = "fuckingfast.co"
@@ -57,6 +60,35 @@ SUPPORTED_HOSTS = (DATANODES_HOST, FUCKINGFAST_HOST)
 def _d(*a):
     if DEBUG:
         print("   [extract]", *a, flush=True)
+
+
+def _num(raw, default: str, *, cast=int, lo=None, hi=None):
+    """Coerce a configured number, falling back to `default` on junk.
+
+    *A setting that is present but empty is not the same as an absent one. ""
+    is what an empty CI variable, an empty line in a sourced .env and
+    PowerShell's `$env:X = ""` all hand over, and int("") raises -- so
+    MOON_CDP_PORT= used to kill the whole process with a ValueError at import,
+    before --help could run at all. Anything that will not cast becomes the
+    documented default rather than a traceback, and a number outside the
+    documented range is clamped into it: 99999 is not a port Chrome can be
+    asked to listen on.*
+
+    Used by both the environment variables and configure(), so a setting means
+    the same thing however it arrives.
+    """
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        try:
+            value = cast(default)
+        except (TypeError, ValueError):
+            value = 0
+    if lo is not None and value < lo:
+        value = cast(lo)
+    if hi is not None and value > hi:
+        value = cast(hi)
+    return value
 
 
 # ══ fuckingfast.co ════════════════════════════════════════════════════════════
@@ -356,7 +388,8 @@ DN_STEP2_MAX_CLICKS   = 4
 # Auto-click budget. After this the widget is left alone so a human sitting at the
 # headful window can tick it; DN_MANUAL_CAPTCHA_TIMEOUT is that grace period.
 DN_CAPTCHA_AUTO_TIMEOUT   = 45.0
-DN_MANUAL_CAPTCHA_TIMEOUT = float(os.environ.get("MOON_DN_CAPTCHA_WAIT", "240"))
+DN_MANUAL_CAPTCHA_TIMEOUT = _num(os.environ.get("MOON_DN_CAPTCHA_WAIT"),
+                                 "240", cast=float, lo=0)
 DN_CAPTCHA_RECLICK        = 13.0
 
 # ── datanodes official API (no captcha, no countdown, no browser) ─────────────
@@ -1049,7 +1082,7 @@ import sys
 import urllib.error
 import urllib.request
 
-CDP_PORT      = int(os.environ.get("MOON_CDP_PORT", "9222"))
+CDP_PORT      = _num(os.environ.get("MOON_CDP_PORT"), "9222", lo=1, hi=65535)
 CHROME_PATH   = os.environ.get("MOON_CHROME_PATH", "").strip()
 USE_REAL_CHROME = os.environ.get("MOON_REAL_CHROME", "1") != "0"
 
@@ -1075,7 +1108,7 @@ USE_REAL_CHROME = os.environ.get("MOON_REAL_CHROME", "1") != "0"
 # identities. Combined with the crash-respawn in ensure_live_browser(), this
 # keeps the Cloudflare-friendly single-identity behaviour while still bounding
 # memory/CPU regardless of the "Browsers" GUI setting.
-DN_LANES = max(1, min(int(os.environ.get("MOON_DN_LANES", "3") or 3), 8))
+DN_LANES = _num(os.environ.get("MOON_DN_LANES"), "3", lo=1, hi=8)
 
 _CHROME_PROC   : subprocess.Popen | None = None
 _CDP_BROWSER   = None
@@ -1485,13 +1518,14 @@ def configure(*, lanes: int | None = None, chrome_path: str | None = None,
     global DN_LANES, CHROME_PATH, DN_API_KEY, DN_MANUAL_CAPTCHA_TIMEOUT, DN_HEADLESS
 
     if lanes is not None:
-        DN_LANES = max(1, min(int(lanes), 8))
+        DN_LANES = _num(lanes, str(DN_LANES), lo=1, hi=8)
     if chrome_path is not None:
         CHROME_PATH = chrome_path.strip()
     if api_key is not None:
         DN_API_KEY = api_key.strip()
     if captcha_wait is not None:
-        DN_MANUAL_CAPTCHA_TIMEOUT = float(max(0, int(captcha_wait)))
+        DN_MANUAL_CAPTCHA_TIMEOUT = _num(captcha_wait, str(DN_MANUAL_CAPTCHA_TIMEOUT),
+                                         cast=float, lo=0)
     if headless is not None:
         DN_HEADLESS = bool(headless)
 

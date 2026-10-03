@@ -53,7 +53,11 @@ INDEX = WEB / "index.html"
 SETTINGS = HERE / "settings.json"
 
 IDLE_EXIT_S = 12.0
-DEBUG = bool(os.environ.get("MOON_DEBUG"))
+# Same reading as moon_extract.DEBUG: `1` switches tracing on, so MOON_DEBUG=0
+# has to switch it off. Kept as its own line because this module is stdlib-only
+# by design and does not import moon_extract.
+DEBUG = os.environ.get("MOON_DEBUG", "0").strip().lower() not in (
+    "", "0", "no", "off", "false")
 
 SETTINGS_KEYS = (
     "out_folder", "mode", "workers", "dl_streams", "retries",
