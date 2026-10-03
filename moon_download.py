@@ -612,7 +612,7 @@ async def download_file(
                                 pub_win.popleft()
                             pub_span = max(min(3.0,now - dl_t0), 0.25) if pub_win else 1.0
                             rec.done_bytes = downloaded
-                            rec.live_mbs = sum(b for _, b in pub_win) / pub_span / 1_048_576
+                            rec.live_mbs = sum(b for _, b in pub_win) / pub_span / 1e6
 
                         if effective_detect and (now - last_check) >= STALL_CHECK_S:
                             last_check = now
