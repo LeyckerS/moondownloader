@@ -56,7 +56,7 @@ The start banner reports what is in use per host:
 
 ## Environment variables
 
-All optional. The GUI overrides them at run time; the CLI reads them directly.
+All optional. The GUI overrides the settings it exposes at run time; the CLI reads them directly.
 
 | Variable | Default | What it does |
 |:--|:--|:--|
@@ -68,6 +68,7 @@ All optional. The GUI overrides them at run time; the CLI reads them directly.
 | `MOON_DN_API_KEY` | *(empty)* | datanodes key (`direct_link` needs premium) |
 | `MOON_DN_HEADLESS` | `0` | `1` = headless — **the captcha will not solve** |
 | `MOON_DN_CAPTCHA_WAIT` | `240` | seconds to wait for a manual solve |
+| `MOON_DN_BLOCK_SPAM_NAV` | `1` | `0` = allow unrecognized top-level redirects during datanodes extraction |
 | `MOON_DEBUG` | *(off)* | `1` = trace every gate of the extraction |
 
 `setx` only affects **new** processes: after setting a variable you have to close and
