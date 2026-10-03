@@ -231,6 +231,15 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if self.client_address[0] not in ("127.0.0.1", "::1"):
             return False
         token = self.headers.get("X-Moon-Token", "")
+        if not token.isascii():
+            # Header bytes are decoded as latin-1, so a client can put anything in
+            # 0x80-0xFF here -- and compare_digest raises TypeError on a non-ASCII
+            # str rather than returning False. That exception escaped the auth
+            # check itself: the handler died, the connection was dropped with no
+            # reply at all, and the traceback went to stderr. A token minted by
+            # token_urlsafe() is always ASCII, so anything else is simply wrong
+            # and gets the same 403 as any other bad token.
+            return False
         return secrets.compare_digest(token, self.server.token)
 
     def _send_json(self, payload: dict, status: int = 200) -> None:
