@@ -46,7 +46,7 @@ Turnstile is refusing the browser, not the account.
 ## Chrome opens even though I only pasted fuckingfast links
 
 Fixed in V2. `moon_extract.BrowserGate` launches on the first datanodes link and never
-before, in the WebView GUI, the Tk GUI and the CLI alike.
+before, in the WebView GUI and the CLI alike.
 
 If you still see it, you are running pre-V2 files: check that `moon_extract.py`
 contains `class BrowserGate` and that `moon_engine.py` / `moon_cli.py` contain no bare
