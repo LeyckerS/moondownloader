@@ -170,7 +170,8 @@ function applyLang(lang) {
 /* ── formatting ───────────────────────────────────────────────────────── */
 const fmtSpeed = (mbs) => (mbs >= 1 ? [mbs.toFixed(1), "MB/s"] : [(mbs * 1024).toFixed(0), "KB/s"]);
 const fmtEta = (s) => {
-  s = Math.max(0, Math.round(s));
+  // null is the engine's "no meaningful estimate" (#85): same dash as any other unknown.
+  s = Math.max(0, Math.round(s || 0));
   if (!s) return "—";
   if (s >= 3600) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
   if (s >= 60) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
@@ -450,7 +451,7 @@ function renderMetrics(m, relabelOnly = false) {
   roll($("#vBytes"), gb, (v) => (v >= 0.01 ? v.toFixed(2) : "0"));
   $("#subCounts").textContent = T("counts", m.ok || 0, m.fail || 0, m.kills || 0);
 
-  $("#vEta").textContent = fmtEta(m.eta_s || 0);
+  $("#vEta").textContent = fmtEta(m.eta_s);
   $("#subRemaining").textContent = T("remaining", Math.max(0, (m.dl_total || 0) - (m.dl_done || 0)));
 
   $("#phase").textContent = phaseText(m);
