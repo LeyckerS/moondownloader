@@ -446,7 +446,7 @@ function renderMetrics(m, relabelOnly = false) {
   // one card, and two toggles of "hot" on the same element would fight.
   $("#vDone").closest(".hstat").classList.toggle("hot", (m.dl_done || 0) > 0);
 
-  const gb = (m.bytes_total || 0) / 2 ** 30;
+  const gb = (m.bytes_total || 0) / 1e9;
   roll($("#vBytes"), gb, (v) => (v >= 0.01 ? v.toFixed(2) : "0"));
   $("#subCounts").textContent = T("counts", m.ok || 0, m.fail || 0, m.kills || 0);
 
@@ -927,7 +927,7 @@ function showSummary() {
   $("#sumFail").textContent = m.fail || 0;
   // Same conversion and the same label as the Downloaded card, deliberately:
   // one expression to find if the unit ever needs correcting.
-  const gb = (m.bytes_total || 0) / 2 ** 30;
+  const gb = (m.bytes_total || 0) / 1e9;
   $("#sumBytes").textContent = gb >= 0.01 ? `${gb.toFixed(2)} GB` : "0";
   $("#sumElapsed").textContent = m.elapsed_s > 0 ? fmtClock(m.elapsed_s) : "—";
   $("#btnCopyFailed").hidden = failedLinks().length === 0;
