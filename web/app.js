@@ -78,6 +78,7 @@ const I18N = {
     ph_extract: (ed, et, dd, dt, act) => `Extracting [${ed}/${et}] + downloading [${dd}/${dt} done · ${act} active]`,
     ph_download: (dd, dt, act) => `Downloading [${dd}/${dt} done · ${act} active]`,
     ph_done: "finished",
+    ph_done_fail: (ok, fail) => `completed with failures · ${ok} ok · ${fail} failed`,
     toast_no_links: "no links pasted",
     toast_no_folder: "pick a destination folder",
   },
@@ -132,6 +133,7 @@ const I18N = {
     ph_extract: (ed, et, dd, dt, act) => `Estrazione [${ed}/${et}] + download [${dd}/${dt} fatti · ${act} attivi]`,
     ph_download: (dd, dt, act) => `Download [${dd}/${dt} fatti · ${act} attivi]`,
     ph_done: "finito",
+    ph_done_fail: (ok, fail) => `completato con errori · ${ok} ok · ${fail} errori`,
     toast_no_links: "nessun link incollato",
     toast_no_folder: "scegli la cartella di destinazione",
   },
@@ -419,10 +421,20 @@ function setRunState(state) {
 
 function phaseText(m) {
   const parts = [];
-  if (m.stage === "idle") parts.push(T("ph_idle"));
-  else if (m.stage === "extracting") parts.push(T("ph_extract", m.extract_done, m.extract_total, m.dl_done, m.dl_total, m.active));
-  else if (m.stage === "downloading") parts.push(T("ph_download", m.dl_done, m.dl_total, m.active));
-  else parts.push(T("ph_done"));
+  const hasFailures = (m.fail || 0) > 0;
+
+  if (m.stage === "idle") {
+    parts.push(T("ph_idle"));
+  } else if (m.stage === "extracting") {
+    parts.push(T("ph_extract", m.extract_done, m.extract_total, m.dl_done, m.dl_total, m.active));
+  } else if (m.stage === "downloading") {
+    parts.push(T("ph_download", m.dl_done, m.dl_total, m.active));
+  } else if (hasFailures) {
+    parts.push(T("ph_done_fail", m.ok || 0, m.fail || 0));
+  } else {
+    parts.push(T("ph_done"));
+  }
+
   const gb = (m.bytes_total || 0) / 1e9;
   if (gb >= 0.01) parts.push(`${gb.toFixed(2)} GB`);
   if (m.elapsed_s > 0 && m.stage !== "idle") parts.push(fmtClock(m.elapsed_s));
@@ -439,12 +451,18 @@ function renderMetrics(m, relabelOnly = false) {
   roll(vSpeed, speed >= 1 ? speed : speed * 1024, (v) => (speed >= 1 ? v.toFixed(1) : v.toFixed(0)));
   $("#spark").closest(".card").classList.toggle("hot", speed > 0.05);
 
+  const hasFailures = (m.fail || 0) > 0;
+  const completedCard = $("#vDone").closest(".hstat");
+
   roll($("#vDone"), m.dl_done || 0, (v) => String(Math.round(v)));
   $("#uDone").textContent = "/" + (m.dl_total || 0);
   setBar("#barDone", m.dl_done, m.dl_total, m.stage === "downloading" || m.stage === "extracting");
+
   // Scoped to its own readout, not to the card: speed and completed now share
   // one card, and two toggles of "hot" on the same element would fight.
-  $("#vDone").closest(".hstat").classList.toggle("hot", (m.dl_done || 0) > 0);
+  completedCard.classList.toggle("hot", (m.dl_done || 0) > 0);
+  completedCard.classList.toggle("has-failures", hasFailures);
+  $("#barDone").classList.toggle("has-failures", hasFailures);
 
   const gb = (m.bytes_total || 0) / 2 ** 30;
   roll($("#vBytes"), gb, (v) => (v >= 0.01 ? v.toFixed(2) : "0"));
@@ -459,6 +477,9 @@ function renderMetrics(m, relabelOnly = false) {
   setBar("#barExtract", m.extract_done, m.extract_total, m.stage === "extracting");
   setBar("#barDownload", m.dl_done, m.dl_total, m.stage === "downloading");
   setBar("#globalBar", m.dl_done, m.dl_total, false);
+
+  $("#barDownload").classList.toggle("has-failures", hasFailures);
+  $("#globalBar").classList.toggle("has-failures", hasFailures);
 
   if (!relabelOnly) { pushSpark(speed); setHeat(speed); }
 }
