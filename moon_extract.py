@@ -1415,6 +1415,13 @@ class BrowserGate:
                 if shared:
                     await shutdown_chrome()      # lanes, CDP handle, the process
                 else:
+                    # The pool belongs to the browser that is going away, and
+                    # _ensure_lanes() only ever rebuilds it when _lane_queue is
+                    # None. Teardown here closed the context but left both, so the
+                    # next run in this process -- a second Engine.start(), or a
+                    # second batch through one CLI invocation -- handed every
+                    # datanodes extraction a closed context.
+                    await _drop_lanes()
                     await close_browser(browser, False)
             if pw is not None:
                 try:
