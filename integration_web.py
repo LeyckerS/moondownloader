@@ -19,8 +19,6 @@ import tempfile
 import time
 import traceback
 
-from playwright.sync_api import sync_playwright
-
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
@@ -98,6 +96,10 @@ def install_bridge(page, api) -> None:
 
 
 def main() -> int:
+    # Imported here, not at module level, so importing the module (to read
+    # VERSION_HANDSHAKE_JS, for example) works without the browser driver.
+    from playwright.sync_api import sync_playwright
+
     moon_engine.Engine._run = fake_run
     moon_bridge.SETTINGS = pathlib.Path(tempfile.mkdtemp()) / "settings.json"
 
