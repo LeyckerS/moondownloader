@@ -513,9 +513,15 @@ class Engine:
             self.log(f"⚠  Log save error: {e}", "warn")
 
         if output_links and mode == "links" and not fatal_control.is_set():
-            with open(os.path.join(base,"output_links.txt"),"w",encoding="utf-8") as f:
-                f.write("\n".join(output_links)+"\n")
-            self.log("✓  Links → output_links.txt", "info")
+            # Guarded like the two report writes around it: the run's downloads are
+            # already done, and an OSError here used to escape _run and take the
+            # failed_links.txt write and the completion summary down with it.
+            try:
+                with open(os.path.join(base,"output_links.txt"),"w",encoding="utf-8") as f:
+                    f.write("\n".join(output_links)+"\n")
+                self.log("✓  Links → output_links.txt", "info")
+            except OSError as e:
+                self.log(f"⚠  Links save error: {e}", "warn")
         if failed_urls:
             try:
                 with open(os.path.join(base,"failed_links.txt"),"w",encoding="utf-8") as f:
