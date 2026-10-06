@@ -101,6 +101,10 @@ def shoot(out_dir: pathlib.Path, sizes: list[tuple[int, int]]) -> int:
 def main() -> int:
     out = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else HERE / "shots")
     raw = sys.argv[2:]
+    if len(raw) % 2:
+        print(f"error: sizes come in width×height pairs; odd argument count {raw!r}",
+              file=sys.stderr)
+        return 2
     sizes = [(2554, 1400), (1440, 900)] if not raw else [
         (int(raw[i]), int(raw[i + 1])) for i in range(0, len(raw) - 1, 2)]
     return shoot(out, sizes)
