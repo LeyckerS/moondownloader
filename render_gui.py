@@ -11,15 +11,18 @@ from __future__ import annotations
 import pathlib
 import sys
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeout
-from playwright.sync_api import sync_playwright
-
 HERE = pathlib.Path(__file__).parent
 PAGE = (HERE / "web" / "index.html").resolve()
 ROW_TIMEOUT_MS = 8000
 
 
 def shoot(out_dir: pathlib.Path, sizes: list[tuple[int, int]]) -> int:
+    # Imported here, not at module level: main()'s argument validation — and
+    # any consumer that merely wants to check a command line — must work
+    # without the browser driver installed.
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+    from playwright.sync_api import sync_playwright
+
     out_dir.mkdir(parents=True, exist_ok=True)
     problems: list[str] = []
     with sync_playwright() as p:
