@@ -33,6 +33,13 @@ LINKS = "\n".join(
     f"CoD_-_Black_Ops_3_--_fitgirl-repacks.site_--_.part{n:02d}.rar"
     for n in range(1, 9))
 
+# Wait for the page's boot sequence to have stamped the #version line. This is
+# checked against whatever the app *ships* -- the old literal "v2" match became
+# a permanent timeout when the app moved past v2.x (it ships v4.2 today).
+VERSION_HANDSHAKE_JS = (
+    "() => document.querySelector('#version').textContent.startsWith('v')"
+)
+
 
 async def fake_run(self, urls, n_workers, max_dl, max_retries):
     """Stand-in for the asyncio core: same state mutations, no sockets."""
@@ -108,8 +115,7 @@ def main() -> int:
 
         install_bridge(page, api)
         page.goto(PAGE.as_uri())
-        page.wait_for_function("() => document.querySelector('#version').textContent.includes('v2')",
-                               timeout=8000)
+        page.wait_for_function(VERSION_HANDSHAKE_JS, timeout=8000)
         print("bridge handshake ok ·", page.eval_on_selector("#version", "e => e.textContent"))
 
         page.fill("#links", LINKS)
