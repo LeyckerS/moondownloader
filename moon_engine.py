@@ -393,7 +393,16 @@ class Engine:
                     self._inc("_fail"); failed_urls.append(url)
                     rec.status="fail"; mark_done_fn()
 
-                self._inc("_url_done"); q.task_done()
+                if not is_re:
+                    # A stall kill re-queues the same link for re-extraction,
+                    # so counting per queue entry counts it twice against
+                    # _url_total and the GUI reads 2/1 extracted. The first
+                    # pass already counted this link; the CLI's accounting has
+                    # guarded the same case by record since it was written
+                    # (mark_extraction, moon_engine.py:169) — this inline
+                    # counter missed the identical guard.
+                    self._inc("_url_done")
+                q.task_done()
 
             if my_tasks:
                 await asyncio.gather(*my_tasks, return_exceptions=True)
