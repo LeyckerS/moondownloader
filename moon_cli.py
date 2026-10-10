@@ -170,6 +170,12 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 elif msg == "stall_killed":
                     new_kc = kc + 1; kill_counts[orig_url] = new_kc
                     print(f"  [kill#{new_kc}] {filename}  ({bytes_done//(1<<20)}MB) -> re-extract")
+                    # The engine increments this at the kill site (moon_engine.py:255)
+                    # and the CLI did not, so `is_re` below never fired: a
+                    # stall-killed link was re-queued as if it were a first
+                    # attempt and burned the full retry budget behind 1s/2s/4s
+                    # of backoff before it was counted at all (#178).
+                    rec.stall_kills += 1
                     rec.queued_at = time.monotonic(); rec.status = "pending"
                     progress.mark_download_retry(); finalized = True
                     if not fatal_control.is_set():
@@ -282,10 +288,17 @@ async def run(urls: list[str], output_dir: str, n_workers: int,
                 await q.put((url, attempt+1, rec))
                 q.task_done(); continue
 
-            if not success and not is_re and not fatal_control.is_set():
+            if not success and not fatal_control.is_set():
                 failed_urls.append(url)
                 rec.status = "fail"
-                if progress.mark_extraction(rec, False):
+                # is_re picks the counter: a re-extraction was already counted
+                # as extracted on its first pass, and mark_extraction is a
+                # no-op for an already-counted record — routing it there left
+                # the link uncounted and the run waiting for it forever (#178).
+                # The terminal count for a re-extraction is the download end.
+                counted = (progress.mark_download_end(False) if is_re
+                           else progress.mark_extraction(rec, False))
+                if counted:
                     all_done.set()
 
             q.task_done()
