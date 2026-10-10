@@ -389,7 +389,14 @@ class Engine:
                     await q.put((url, attempt+1, rec))
                     q.task_done(); continue
 
-                if not success and not is_re and not fatal_control.is_set():
+                if not success and not fatal_control.is_set():
+                    # No `not is_re` guard here on purpose: a stall-killed link
+                    # that fails re-extraction must still be counted, or n_done
+                    # never reaches the link count, all_done is never set and the
+                    # workers wait forever (#178). The retry branch above still
+                    # excludes is_re, so a re-extraction never burns the retry
+                    # budget a second time, and mark_done_fn is counted per queue
+                    # entry, so this is the single terminal count for the record.
                     self._inc("_fail"); failed_urls.append(url)
                     rec.status="fail"; mark_done_fn()
 
